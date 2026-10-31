@@ -1,7 +1,6 @@
 # Core-Breach-Zero
 
-Menu-only prototype for a tower defense game. Run `npm install` and `npm start`,
-then open `http://localhost:3000`. The main menu can host or join a two-player
-room; gameplay is not implemented yet. Players on the same network can use the
-host's address and room code. Set `PORT` to choose a different listening port.
-Play now at: https://kayneheffelfinger-cyber.github.io/Core-Breach-Zero/ 
+Core Breach: Zero is a strategy based tower defense game currently featuring 4 Game modes, an event mode, and soon to be 5 game modes.
+Inside the shop you'll find 21 unique towers, and 7 Perks!
+
+How will you fair against the Mainframes onslaught?
