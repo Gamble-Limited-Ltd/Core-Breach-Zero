@@ -14,8 +14,16 @@ document.querySelector('#server-port').textContent = `PORT ${port}`;
 document.querySelector('#preview-port').textContent = port;
 
 // --- Update log: every deployment to the grid, newest first ----------------------
-const BUILD = '2026.11.03';
+const BUILD = '2026.11.04';
 const UPDATE_LOG = [
+  {
+    version: '2026.11.04', tag: 'FIELD AUDIT',
+    items: [
+      ['BAL', 'THE FIELD AUDIT — every chassis on the grid went under the same ruler: raw damage-per-second per salvage invested, base AND maxed, every rung of every ladder, splash rings priced at realistic pack density. Verdict: the roster sits in a healthy band — SHREDDER 15 salvage-per-DPS maxed, SENTINEL 16, FLAK POST 21, SNIPER 22, SHOTGUNNER 27, THE VETERAN 27 (40 without Fire Discipline heat), MISSILE SILO 31, VIRUS 32, EXECUTIONER 37 — and the fillers keep their cheap-and-limited identity by design (SPARK COIL 34, TAR SPRAYER never kills). The support shelf (RELAY, WAR DRUMS, WAR BONDS, ZERO DAY) is aura/economy math, not DPS math, and passes. Two chassis failed the audit and get rebuilt below.'],
+      ['MORTAR', 'LAZER MORTAR\u2019s ladder ran UPSIDE DOWN — TRUE MORTAR actually LOWERED the mortar\u2019s damage-per-second (the 0.35→0.25 rate cut bit deeper than the 80→100 damage raised it) and USA FUNDING only clawed back to 28 DPS for 2,000 salvage. The Easy-Mode trophy now climbs like one: HIGHLY EXPLOSIVE ROUNDS 80→90 damage, TRUE MORTAR 130 damage with the 0.35 clock kept, and USA FUNDING 190-damage shells on a 75-unit splash at 245 reach. Every rung is strictly better: 21 → 31 → 45 → 66 DPS.'],
+      ['CARRIER', 'DRONE SPAWNER was the worst salvage-to-damage rig on the grid — maxed APEX CARRIER worked out to ~67 DPS for 3,885 invested. The line goes back on a war footing: the base fabricates 90-payload warbirds every 5 seconds (was 70 every 6), WARBIRD CHASSIS 110→150, SWARM LOGIC 160→220 on a 3.2s cadence, and the APEX CARRIER fields 300-payload monsters every 2.6 seconds at 230u reach — 115 DPS of pad-free, air-and-ground delivery that cannot be dodged, only outrun.'],
+    ],
+  },
   {
     version: '2026.11.03', tag: 'GOLDEN VETERANS',
     items: [

@@ -90,7 +90,7 @@ console.log('--- Deploy chain: update log, rewards, cache-bust ---');
 const appjs = read('app.js');
 const serverjs = read('server.js');
 const indexhtml = read('index.html');
-check('BUILD bumped to 2026.11.03', appjs.includes("const BUILD = '2026.11.03';"));
+check('BUILD bumped to 2026.11.04', appjs.includes("const BUILD = '2026.11.04';"));
 check('UPDATE LOG leads with IRON RAIN entry, then CRIMSON SIGNAL then HELL PROTOCOL', appjs.indexOf('IRON RAIN') < appjs.indexOf('CRIMSON SIGNAL') && appjs.indexOf('CRIMSON SIGNAL') < appjs.indexOf('HELL PROTOCOL') && appjs.indexOf('HELL PROTOCOL') < appjs.indexOf('RELAY NET'));
 const appRewards = extractLiteral(appjs, 'REWARDS');
 const serverRewards = extractLiteral(serverjs, 'REWARDS');
@@ -99,7 +99,7 @@ check('LOCAL hard boss + flawless bumped (18 NC / 65 XP / 100 NC flawless)', app
 check('server.js REWARDS.hard mirrors LOCAL exactly', JSON.stringify(appRewards.hard) === JSON.stringify(serverRewards.hard));
 check('easy/medium rewards untouched', appRewards.easy.winNC === 60 && appRewards.medium.winNC === 100);
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261024j', busts.length === 6 && busts.every((v) => v === '?v=20261024j'), busts.join(' '));
+check('all 6 index.html assets cache-busted to 20261024k', busts.length === 6 && busts.every((v) => v === '?v=20261024k'), busts.join(' '));
 check('play menu copy names the hell pass', appjs.includes('30 waves of pure hell'));
 
 console.log('--- Syntax gates ---');
