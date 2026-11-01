@@ -184,13 +184,13 @@ check('blueprint grid excludes ULTIMATUM cards', shopjs.includes('!entry.ultimat
 check('ultimatum vault styled (gold hero + card + exchange)', styles.includes('.ult-hero') && styles.includes('.ult-card') && styles.includes('.ult-exchange.ready') && styles.includes('.tok-ult'));
 
 console.log('--- Deploy chain: update log, build, cache-bust ---');
-check('BUILD bumped to 2026.11.04', appjs.includes("const BUILD = '2026.11.04';"));
+check('BUILD bumped to 2026.11.05', appjs.includes("const BUILD = '2026.11.05';"));
 check('UPDATE LOG leads with ULTIMATUM entry', appjs.indexOf("version: '2026.10.28', tag: 'ULTIMATUM'") < appjs.indexOf("version: '2026.10.27'") && appjs.indexOf('FULL CLEARANCE') < appjs.indexOf('SCRAP PROTOCOL'));
 check('update log covers cap removal + vault + blossom card + migration', ['clearance cap is GONE', 'ULTIMATUM system goes live', 'first ULTIMATUM card', 'backfilled from their clearance history'].every((s) => appjs.includes(s)));
 check('update log covers sentinel buff + shredder + sniper nerf #3 + virus rework', ['SENTINEL TURRET buffed', 'SHREDDER decrypts at Clearance 20', 'SNIPER tuned down again', 'VIRUS reworked', 'MISSILE SILO'].every((s) => appjs.includes(s)));
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261024k', busts.length === 6 && busts.every((v) => v === '?v=20261024k'), busts.join(' '));
-check('shell footer brands GOLDEN VETERANS', indexhtml.includes('BUILD 2026.11.04 // FIELD AUDIT') && indexhtml.includes('THE CRIMSON WELL IS OPEN') && indexhtml.includes('ULTIMATUM VAULT OPEN'));
+check('all 6 index.html assets cache-busted to 20261024l', busts.length === 6 && busts.every((v) => v === '?v=20261024l'), busts.join(' '));
+check('shell footer brands GLL FOUNDATIONS', indexhtml.includes('BUILD 2026.11.05 // GLL FOUNDATIONS') && indexhtml.includes('THE CRIMSON WELL IS OPEN') && indexhtml.includes('ULTIMATUM VAULT OPEN'));
 check('play menu copy updated to 15% hostiles', appjs.includes('compounding hulls, 15% faster hostiles'));
 check('fx-missile warhead styled (orange glow)', styles.includes('.fx-missile') && /fx-missile[^}]*#ff7a45/.test(styles));
 check('fx-chip stream styled for the Shredder', styles.includes('.fx-chip'));
@@ -378,9 +378,16 @@ check('TRUE MORTAR no longer cuts the clock (rate stays 0.35 after BETTER SCOPE)
 check('DRONE SPAWNER maxed line fields 115 DPS (300 payload / 2.6s cadence)', drone && Math.round(drone.track[3].sets.drone / drone.track[3].sets.launchEvery) === 115);
 check('DRONE SPAWNER ladder is monotonic in payload (90/150/220/300)', [drone.stats.drone, ...drone.track.filter((t) => t.sets.drone).map((t) => t.sets.drone)].join(',') === '90,150,220,300');
 check('FIELD AUDIT logged: 2026.11.04 entry leads the update log', appjs.indexOf("version: '2026.11.04', tag: 'FIELD AUDIT'") > -1 && appjs.indexOf("version: '2026.11.04'") < appjs.indexOf("version: '2026.11.03'"));
-check('BUILD bumped to 2026.11.04', appjs.includes("const BUILD = '2026.11.04';"));
-check('footer brands FIELD AUDIT', indexhtml.includes('BUILD 2026.11.04 // FIELD AUDIT'));
-check('all 6 assets cache-busted to 20261024k', (indexhtml.match(/\?v=20261024k/g) || []).length === 6);
+check('BUILD bumped to 2026.11.05', appjs.includes("const BUILD = '2026.11.05';"));
+check('footer brands GLL FOUNDATIONS', indexhtml.includes('BUILD 2026.11.05 // GLL FOUNDATIONS'));
+check('all 6 assets cache-busted to 20261024l', (indexhtml.match(/\?v=20261024l/g) || []).length === 6);
+
+console.log('--- GLL FOUNDATIONS (2026.11.05): hosting merge, npm test law, env admin key ---');
+check('GLL FOUNDATIONS logged: 2026.11.05 entry leads the update log', appjs.indexOf("version: '2026.11.05', tag: 'GLL FOUNDATIONS'") > -1 && appjs.indexOf("version: '2026.11.05'") < appjs.indexOf("version: '2026.11.04'"));
+check('npm test wired in package.json', read('package.json').includes('"test": "node scripts/run-tests.js"'));
+check('AGENTS.md + run-tests.js + CI workflow shipped', fs.existsSync(path.join(ROOT, 'AGENTS.md')) && fs.existsSync(path.join(ROOT, 'scripts', 'run-tests.js')) && fs.existsSync(path.join(ROOT, '.github', 'workflows', 'ci.yml')));
+check('old hardcoded admin code is gone from app + server', !appjs.includes('ADMINLOG101011') && !serverjs.includes('ADMINLOG101011'));
+check('ADMIN_KEY_CODE env gates the admin code on the server', serverjs.includes('process.env.ADMIN_KEY_CODE') && serverjs.includes('ADMIN_KEY_CODE.length >= 8'));
 
 console.log('--- Syntax gates ---');
 for (const f of ['combat.js', 'app.js', 'server.js', 'shop.js']) {

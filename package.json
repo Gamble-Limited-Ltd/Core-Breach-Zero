@@ -4,7 +4,8 @@
   "private": true,
   "description": "A browser tower defense game with joinable multiplayer rooms",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node scripts/run-tests.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

@@ -28,7 +28,7 @@ $B find first "#auth-submit" click
 $B wait --fn "document.querySelector('#auth-overlay').hidden === true" --timeout 8000
 sleep 0.5
 # Farm the SERVER account past the veteran gate (browser purchases are server-validated).
-$B eval "(async () => { for (let i = 0; i < 7; i++) await apiRequest('/api/redeem', { token: localStorage.getItem('cbz-token'), code: 'ADMINLOG101011' }); const prof = await apiRequest('/api/profile', { token: localStorage.getItem('cbz-token') }); window.CBZShop.setProfile(prof.profile); return prof.profile.level; })()" > /dev/null
+$B eval "(async () => { for (let i = 0; i < 7; i++) await apiRequest('/api/redeem', { token: localStorage.getItem('cbz-token'), code: '$ADMIN_KEY_CODE' }); const prof = await apiRequest('/api/profile', { token: localStorage.getItem('cbz-token') }); window.CBZShop.setProfile(prof.profile); return prof.profile.level; })()" > /dev/null
 sleep 1.2
 
 if [ "$START_AT" -le 1 ] && [ "$STOP_AT" -ge 1 ]; then

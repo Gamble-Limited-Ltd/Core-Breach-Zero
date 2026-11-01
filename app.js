@@ -14,8 +14,17 @@ document.querySelector('#server-port').textContent = `PORT ${port}`;
 document.querySelector('#preview-port').textContent = port;
 
 // --- Update log: every deployment to the grid, newest first ----------------------
-const BUILD = '2026.11.04';
+const BUILD = '2026.11.05';
 const UPDATE_LOG = [
+  {
+    version: '2026.11.05', tag: 'GLL FOUNDATIONS',
+    items: [
+      ['NEW', 'GLL hosting merge — Gamble Limited Ltd now hosts the grid (HALL): PolyForm Noncommercial license + NOTICE, a draft Terms page, and an AGENTS.md rulebook that every agent and human reads first, every session.'],
+      ['OPS', 'npm test is law — one command runs every suite (towers, crimson, hard, relay, smoke, rooms, admin, shop, loadout), each on its own throwaway server + accounts file, with a mid-run restart that proves account data survives reboot. CI enforces it on every push to main.'],
+      ['SEC', 'The hardcoded admin salvage code is retired — the admin key now loads from the ADMIN_KEY_CODE environment variable only (8+ characters, empty = disabled), and the static file server refuses dotfiles and accounts files outright. ACCOUNTS_FILE is now configurable for hosters.'],
+      ['UI', 'Footer credit line — Made by Loomis / Hosted by Gamble Limited Ltd / Terms.'],
+    ],
+  },
   {
     version: '2026.11.04', tag: 'FIELD AUDIT',
     items: [
@@ -196,7 +205,7 @@ const UPDATE_LOG = [
   {
     version: '2026.10.18', tag: 'SALVAGE CODES',
     items: [
-      ['NEW', 'ADMINLOG101011 salvage code — +10,000 NC / +1,000 BT / +5,000 XP, repeatable.'],
+      ['NEW', 'Admin salvage code — +10,000 NC / +1,000 BT / +5,000 XP, repeatable.'],
       ['FIX', 'Cache-busting on every asset — deploys always serve fresh code, no more stale menus.'],
     ],
   },
@@ -350,7 +359,6 @@ const REDEEM_CODES = {
   GHOSTWIRE: { nc: 0, bt: 75 },
   DATACACHE: { nc: 4000, bt: 100 },
   ZERODAY: { nc: 5000, bt: 500 },
-  ADMINLOG101011: { nc: 10000, bt: 1000, xp: 5000, repeat: true, admin: true, firstClear: true }, // admin key — wallet + XP + CLASSIFIED clearance + reward decryption, repeatable
 };
 
 // --- Achievements & perks -------------------------------------------------------

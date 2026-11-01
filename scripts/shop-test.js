@@ -1,6 +1,7 @@
 // Nexus Shop endpoint tests — phase 1: fresh economy; phase 2: persistence after server restart.
 // Usage: node scripts/shop-test.js 1   (then after server restart)  node scripts/shop-test.js 2
 const BASE = `http://127.0.0.1:${process.env.PORT || 3111}`;
+const ADMIN_CODE = process.env.ADMIN_KEY_CODE || '';
 let pass = 0;
 let fail = 0;
 
@@ -171,7 +172,7 @@ async function api(path, payload) {
     const zeroday = await api('/api/redeem', { token, code: 'zeroday' });
     check('ZERODAY (lowercase) grants +5000 NC +500 BT', zeroday.data.ok && zeroday.data.profile.nc === beforeNc + 10500 && zeroday.data.profile.bt === beforeBt + 675, JSON.stringify(zeroday.data));
 
-    // ADMINLOG101011 — admin test grant: 10000 NC + 1000 BT + 5000 XP, REPEATABLE (no ledger entry, no 409).
+    // ADMIN KEY — admin test grant: 10000 NC + 1000 BT + 5000 XP, REPEATABLE (no ledger entry, no 409).
     const xpToNext = (level) => Math.round(55 * Math.pow(level, 0.86));
     const applyXp = (level, xp, gain) => {
       xp += gain;
@@ -179,13 +180,13 @@ async function api(path, payload) {
       return [level, xp];
     };
     const [expLevel1, expXp1] = applyXp(sealed.data.profile.level, sealed.data.profile.xp, 5000);
-    const adminlog = await api('/api/redeem', { token, code: 'adminlog101011' });
-    check('ADMINLOG101011 (lowercase) grants +10000 NC +1000 BT +5000 XP', adminlog.data.ok && adminlog.data.profile.nc === beforeNc + 20500 && adminlog.data.profile.bt === beforeBt + 1675 && adminlog.data.granted.xp === 5000, JSON.stringify(adminlog.data));
-    check('ADMINLOG101011 level-up loop matches simulation', adminlog.data.profile.level === expLevel1 && adminlog.data.profile.xp === expXp1 && adminlog.data.granted.levelsGained === expLevel1 - sealed.data.profile.level, JSON.stringify(adminlog.data));
-    check('ADMINLOG101011 is the admin key — flags profile.admin', adminlog.data.ok && adminlog.data.profile.admin === true, JSON.stringify(adminlog.data.profile));
+    const adminRedeem = await api('/api/redeem', { token, code: ADMIN_CODE.toLowerCase() });
+    check('ADMIN KEY (lowercase) grants +10000 NC +1000 BT +5000 XP', adminRedeem.data.ok && adminRedeem.data.profile.nc === beforeNc + 20500 && adminRedeem.data.profile.bt === beforeBt + 1675 && adminRedeem.data.granted.xp === 5000, JSON.stringify(adminRedeem.data));
+    check('ADMIN KEY level-up loop matches simulation', adminRedeem.data.profile.level === expLevel1 && adminRedeem.data.profile.xp === expXp1 && adminRedeem.data.granted.levelsGained === expLevel1 - sealed.data.profile.level, JSON.stringify(adminRedeem.data));
+    check('ADMIN KEY is the admin key — flags profile.admin', adminRedeem.data.ok && adminRedeem.data.profile.admin === true, JSON.stringify(adminRedeem.data.profile));
     const [expLevel2, expXp2] = applyXp(sealed.data.profile.level, sealed.data.profile.xp, 10000);
-    const adminlog2 = await api('/api/redeem', { token, code: 'ADMINLOG101011' });
-    check('ADMINLOG101011 re-redeemable (repeat grant, no 409)', adminlog2.data.ok && adminlog2.data.profile.nc === beforeNc + 30500 && adminlog2.data.profile.bt === beforeBt + 2675 && adminlog2.data.profile.level === expLevel2 && adminlog2.data.profile.xp === expXp2, JSON.stringify(adminlog2.data));
+    const adminRedeem2 = await api('/api/redeem', { token, code: ADMIN_CODE });
+    check('ADMIN KEY re-redeemable (repeat grant, no 409)', adminRedeem2.data.ok && adminRedeem2.data.profile.nc === beforeNc + 30500 && adminRedeem2.data.profile.bt === beforeBt + 2675 && adminRedeem2.data.profile.level === expLevel2 && adminRedeem2.data.profile.xp === expXp2, JSON.stringify(adminRedeem2.data));
 
     // Shotgunner — clearance level 3 gate + dual-currency 800 NC + 10 BT.
     const freshreg = await api('/api/register', { name: 'SHOPCMDR2', email: 'shop2@test.io', passcode: 'test1234' });
@@ -211,8 +212,8 @@ async function api(path, payload) {
     check('level-20 clearance gate blocks fresh account 403 (SHREDDER)', freshBuyShred.status === 403, JSON.stringify(freshBuyShred.data));
     const freshBuySilo = await api('/api/shop/purchase', { token: freshToken, itemId: 'missilesilo' });
     check('level-30 clearance gate blocks fresh account 403 (MISSILE SILO)', freshBuySilo.status === 403, JSON.stringify(freshBuySilo.data));
-    const freshAdmin = await api('/api/redeem', { token: freshToken, code: 'ADMINLOG101011' });
-    check('ADMINLOG101011 on fresh account jumps past L10 + flags admin', freshAdmin.data.ok && freshAdmin.data.profile.level >= 10 && freshAdmin.data.granted.levelsGained >= 10 && freshAdmin.data.profile.nc === 750 + 10000 && freshAdmin.data.profile.admin === true, JSON.stringify(freshAdmin.data));
+    const freshAdmin = await api('/api/redeem', { token: freshToken, code: ADMIN_CODE });
+    check('ADMIN KEY on fresh account jumps past L10 + flags admin', freshAdmin.data.ok && freshAdmin.data.profile.level >= 10 && freshAdmin.data.granted.levelsGained >= 10 && freshAdmin.data.profile.nc === 750 + 10000 && freshAdmin.data.profile.admin === true, JSON.stringify(freshAdmin.data));
     const rich = await api('/api/profile', { token });
     const sgBeforeNc = rich.data.profile.nc;
     const sgBeforeBt = rich.data.profile.bt;
@@ -230,7 +231,7 @@ async function api(path, payload) {
     check('blossom no longer sold for NC/BT (Ultimatum-only) 404', blossomNC.status === 404, JSON.stringify(blossomNC.data));
     const ultShallow = await api('/api/ultimatum', { token, action: 'exchange' });
     check('ultimatum exchange with shallow XP bank 400', ultShallow.status === 400, JSON.stringify(ultShallow.data));
-    for (let i = 0; i < 12; i++) await api('/api/redeem', { token, code: 'ADMINLOG101011' }); // repeatable +5000 XP — farms past one 50k core
+    for (let i = 0; i < 12; i++) await api('/api/redeem', { token, code: ADMIN_CODE }); // repeatable +5000 XP — farms past one 50k core
     const farmed = await api('/api/profile', { token });
     check('level cap removed: clearance sails past LV 30', farmed.data.profile.level > 30, `level=${farmed.data.profile.level}`);
     check('lifetime totalXp ledger banks past 50k', farmed.data.profile.totalXp >= 50000, `totalXp=${farmed.data.profile.totalXp}`);
@@ -264,7 +265,7 @@ async function api(path, payload) {
     // check is bypassed for admins, while cores still gate the vault.
     const adminFresh = await api('/api/register', { name: 'ADMINFRESH', email: 'adminfresh@test.io', passcode: 'test1234' });
     const adminToken = adminFresh.data.token;
-    await api('/api/redeem', { token: adminToken, code: 'ADMINLOG101011' }); // admin flag + 10,000 NC + 1,000 BT
+    await api('/api/redeem', { token: adminToken, code: ADMIN_CODE }); // admin flag + 10,000 NC + 1,000 BT
     const adminRelay = await api('/api/shop/purchase', { token: adminToken, itemId: 'relay' });
     check('FULL CLEARANCE: admin buys above clearance 200 (L18 relay below L13)', adminRelay.status === 200 && adminRelay.data.ok && adminRelay.data.profile.owned.includes('relay'), JSON.stringify(adminRelay.data));
     const adminVault = await api('/api/ultimatum', { token: adminToken, action: 'buy', card: 'gravewarden' });
@@ -281,7 +282,7 @@ async function api(path, payload) {
     check('relic arms into the loadout 200', relicArm.status === 200 && relicArm.data.ok && relicArm.data.profile.loadout.includes('dawnbreaker'), JSON.stringify(relicArm.data));
     const civArm = await api('/api/loadout', { token: civToken, loadout: ['sentinel', 'dawnbreaker'] });
     check('civilian relic arm rejected 400', civArm.status === 400, JSON.stringify(civArm.data));
-    // FULL CLEARANCE — the admin account (flagged above via ADMINLOG101011) equips
+    // FULL CLEARANCE — the admin account (flagged above via ADMIN KEY) equips
     // perks it never earned; the civilian stays locked out of the same vault.
     const adminPerks = await api('/api/perks', { token, perks: ['deeppockets', 'overclock'] });
     check('FULL CLEARANCE: admin equips unearned perks 200 (deeppockets + overclock)', adminPerks.status === 200 && adminPerks.data.ok && adminPerks.data.profile.equippedPerks.length === 2, JSON.stringify(adminPerks.data));
@@ -311,7 +312,7 @@ async function api(path, payload) {
     // --- GOLDEN VETERANS: blossom reprices to 2 cores, DEATHWARRANT joins at 3 ---
     const blossomBroke2 = await api('/api/ultimatum', { token, action: 'buy', card: 'corpseblossom' });
     check('blossom with 0 cores 402 (2-core tier enforced)', blossomBroke2.status === 402, JSON.stringify(blossomBroke2.data));
-    for (let i = 0; i < 36; i++) await api('/api/redeem', { token, code: 'ADMINLOG101011' }); // +180k lifetime XP — banks three more 50k cores (48 total redeems ≈ 245k)
+    for (let i = 0; i < 36; i++) await api('/api/redeem', { token, code: ADMIN_CODE }); // +180k lifetime XP — banks three more 50k cores (48 total redeems ≈ 245k)
     const farmed2 = await api('/api/profile', { token });
     check('second farm pushes lifetime XP past 200k', farmed2.data.profile.totalXp >= 200000, `totalXp=${farmed2.data.profile.totalXp}`);
     await api('/api/ultimatum', { token, action: 'exchange' });
@@ -324,7 +325,7 @@ async function api(path, payload) {
     check('blossom rebuy 409', blossomRebuy.status === 409, JSON.stringify(blossomRebuy.data));
     const warrantBroke = await api('/api/ultimatum', { token, action: 'buy', card: 'deathwarrant' });
     check('deathwarrant with 1 core 402 (3-core tier enforced)', warrantBroke.status === 402, JSON.stringify(warrantBroke.data));
-    for (let i = 0; i < 12; i++) await api('/api/redeem', { token, code: 'ADMINLOG101011' }); // +60k — banks two more cores
+    for (let i = 0; i < 12; i++) await api('/api/redeem', { token, code: ADMIN_CODE }); // +60k — banks two more cores
     await api('/api/ultimatum', { token, action: 'exchange' });
     const core5 = await api('/api/ultimatum', { token, action: 'exchange' });
     check('two more exchanges bank cores 5-6 (claims 6)', core5.status === 200 && core5.data.profile.ultCores === 3 && core5.data.profile.ultClaims === 6, JSON.stringify(core5.data));

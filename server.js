@@ -6,7 +6,7 @@ const { WebSocketServer } = require('ws');
 
 const port = Number(process.env.PORT || 3000);
 const root = __dirname;
-const accountsFile = path.join(root, 'accounts.json');
+const accountsFile = process.env.ACCOUNTS_FILE || path.join(root, 'accounts.json');
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -78,7 +78,7 @@ function allSeals(mapWins) {
   return GOLDEN_MAPS.every((mapId) => mapSeal(mapWins, mapId));
 }
 
-// Admin surface: accounts flagged by redeeming the admin key code (ADMINLOG101011)
+// Admin surface: accounts flagged by redeeming the admin key code (set via ADMIN_KEY_CODE)
 // or listed here by exact name. Admins see/purchase CLASSIFIED blueprints.
 const ADMIN_NAMES = new Set(['JACKSONLOOMIS-COMMITS']);
 function isAdmin(name) {
@@ -174,8 +174,10 @@ const REDEEM_CODES = {
   GHOSTWIRE: { nc: 0, bt: 75 },
   DATACACHE: { nc: 4000, bt: 100 },
   ZERODAY: { nc: 5000, bt: 500 },
-  ADMINLOG101011: { nc: 10000, bt: 1000, xp: 5000, repeat: true, admin: true, firstClear: true }, // admin key — heavy wallet + XP + CLASSIFIED clearance + reward decryption, repeatable
 };
+// Admin key code comes from the environment only. Unset (or under 8 chars) = admin code disabled.
+const ADMIN_KEY_CODE = String(process.env.ADMIN_KEY_CODE || '').trim().toUpperCase();
+if (ADMIN_KEY_CODE.length >= 8) REDEEM_CODES[ADMIN_KEY_CODE] = { nc: 10000, bt: 1000, xp: 5000, repeat: true, admin: true, firstClear: true }; // heavy wallet + XP + CLASSIFIED clearance + reward decryption, repeatable
 
 function profilePayload(account) {
   const meta = account.meta;
@@ -506,7 +508,8 @@ const server = http.createServer((request, response) => {
 
   const requestedPath = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
   const filePath = path.resolve(root, `.${requestedPath}`);
-  if (!filePath.startsWith(`${root}${path.sep}`)) {
+  const relParts = path.relative(root, filePath).split(path.sep);
+  if (!filePath.startsWith(`${root}${path.sep}`) || relParts.some((p) => p.startsWith('.')) || /^accounts.*\.json$/i.test(relParts[0])) {
     response.writeHead(403).end('Forbidden');
     return;
   }
