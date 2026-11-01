@@ -1,2 +1,5 @@
 node_modules/
-accounts.json
+accounts*.json
+.env
+.env.*
+!.env.example

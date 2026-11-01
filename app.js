@@ -196,7 +196,7 @@ const UPDATE_LOG = [
   {
     version: '2026.10.18', tag: 'SALVAGE CODES',
     items: [
-      ['NEW', 'ADMINLOG101011 salvage code — +10,000 NC / +1,000 BT / +5,000 XP, repeatable.'],
+      ['NEW', 'Admin salvage code — +10,000 NC / +1,000 BT / +5,000 XP, repeatable.'],
       ['FIX', 'Cache-busting on every asset — deploys always serve fresh code, no more stale menus.'],
     ],
   },
@@ -350,7 +350,6 @@ const REDEEM_CODES = {
   GHOSTWIRE: { nc: 0, bt: 75 },
   DATACACHE: { nc: 4000, bt: 100 },
   ZERODAY: { nc: 5000, bt: 500 },
-  ADMINLOG101011: { nc: 10000, bt: 1000, xp: 5000, repeat: true, admin: true, firstClear: true }, // admin key — wallet + XP + CLASSIFIED clearance + reward decryption, repeatable
 };
 
 // --- Achievements & perks -------------------------------------------------------
