@@ -59,7 +59,7 @@ const state = {
   map: null, samplers: [], gateEvents: [], zoneRanges: [],
   waveIndex: -1, queue: [], spawnGap: 0, intermission: 0, countdown: 0,
   cash: 0, baseHp: BASE_MAX, enemies: [], kills: 0, bossesKilled: 0, earned: 0, clock: 0, nidSeq: 0,
-  towers: [], projectiles: [],
+  towers: [], projectiles: [], pidSeq: 0,
   bonusNc: 0,
   corpseLust: 0, // reserved telemetry: total Blood Lust banked across Blossoms
 };
@@ -690,6 +690,7 @@ function tick(ts) {
   state.enemies = state.enemies.filter((enemy) => enemy.alive);
   updateTowers(dt);
   updateProjectiles(dt);
+  renderProjectiles();
   if (coopHost()) {
     state.syncT -= dt;
     if (state.syncT <= 0) { state.syncT = 0.12; coopBroadcast(); }
@@ -2263,9 +2264,7 @@ function updateTowers(dt) {
           tower.lobCd = 4;
           const prey = pool.reduce((best, enemy) => (enemy.dist > best.dist ? enemy : best));
           const [lx, ly] = posOf(prey);
-          const shell = svgNode('circle', { class: 'fx-shell', r: 4, cx: tower.x, cy: tower.y });
-          ui.layers.fx.appendChild(shell);
-          state.projectiles.push({ kind: 'shell', x: tower.x, y: tower.y, tx: lx, ty: ly, speed: 240, dmg: es.lobDmg || 140, splash: es.lobSplash || 50, node: shell });
+          addProjectile({ kind: 'shell', x: tower.x, y: tower.y, tx: lx, ty: ly, speed: 240, dmg: es.lobDmg || 140, splash: es.lobSplash || 50 });
           emit('ring', tower.x, tower.y, 'fx-ring-amber');
         }
       }
@@ -2550,9 +2549,7 @@ function fireTower(tower, target) {
       break;
     }
     case 'lazermortar': {
-      const shell = svgNode('circle', { class: 'fx-shell', r: 4, cx: tower.x, cy: tower.y });
-      ui.layers.fx.appendChild(shell);
-      state.projectiles.push({ kind: 'shell', x: tower.x, y: tower.y, tx, ty, speed: 260, dmg, splash: effStats(tower).splash || 30, node: shell });
+      addProjectile({ kind: 'shell', x: tower.x, y: tower.y, tx, ty, speed: 260, dmg, splash: effStats(tower).splash || 30 });
       break;
     }
     case 'shotgunner': {
@@ -2622,9 +2619,7 @@ function fireTower(tower, target) {
       // nothing — it always lands) and detonates for full damage in the blast.
       // MIRV tiers crack the shell into cluster bomblets on impact.
       const es = effStats(tower);
-      const missile = svgNode('circle', { class: 'fx-shell fx-missile', r: 5, cx: tower.x, cy: tower.y });
-      ui.layers.fx.appendChild(missile);
-      state.projectiles.push({ kind: 'missile', x: tower.x, y: tower.y, tx, ty, speed: 210, dmg, splash: es.splash || 55, cluster: es.cluster || 0, node: missile });
+      addProjectile({ kind: 'missile', x: tower.x, y: tower.y, tx, ty, speed: 210, dmg, splash: es.splash || 55, cluster: es.cluster || 0 });
       emit('ring', tower.x, tower.y, 'fx-ring-amber');
       break;
     }
@@ -2733,8 +2728,32 @@ function fireTower(tower, target) {
   }
 }
 
-function updateProjectiles(dt) {
+function addProjectile(p) {
+  p.id = ++state.pidSeq;
+  state.projectiles.push(p);
+}
+
+// View: one SVG node per projectile id, created on first sight, moved every tick, dropped when the sim forgets it.
+const projNodes = new Map();
+function renderProjectiles() {
   if (!ui.layers) return;
+  const live = new Set();
+  for (const p of state.projectiles) {
+    if (p.dead) continue;
+    live.add(p.id);
+    let node = projNodes.get(p.id);
+    if (!node) {
+      node = svgNode('circle', { class: p.kind === 'missile' ? 'fx-shell fx-missile' : 'fx-shell', r: p.kind === 'missile' ? 5 : 4, cx: p.x, cy: p.y });
+      ui.layers.fx.appendChild(node);
+      projNodes.set(p.id, node);
+    }
+    node.setAttribute('cx', p.x.toFixed(1));
+    node.setAttribute('cy', p.y.toFixed(1));
+  }
+  for (const [id, node] of projNodes) if (!live.has(id)) { node.remove(); projNodes.delete(id); }
+}
+
+function updateProjectiles(dt) {
   for (const p of state.projectiles) {
     if (p.kind === 'shell' || p.kind === 'missile') {
       const dx = p.tx - p.x;
@@ -2765,10 +2784,7 @@ function updateProjectiles(dt) {
         p.x += (dx / Math.hypot(dx, dy)) * step;
         p.y += (dy / Math.hypot(dx, dy)) * step;
       }
-      p.node.setAttribute('cx', p.x.toFixed(1));
-      p.node.setAttribute('cy', p.y.toFixed(1));
     }
-    if (p.dead) p.node.remove();
   }
   state.projectiles = state.projectiles.filter((p) => !p.dead);
 }
