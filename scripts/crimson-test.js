@@ -118,7 +118,7 @@ check('UPDATE LOG leads with CRIMSON VEINS, then IRON RAIN, then CRIMSON SIGNAL'
 
 console.log('--- Crimson hostiles + Well theme (combat.js + styles.css) ---');
 check('hostiles of the dawn carry the e-crimson mark', combat.includes('` e-crimson${') && combat.includes("class: 'e-aura'"));
-check('crimson spawn burns an ember ring', combat.includes("fxRing(x, y, 'fx-ring-crimson')"));
+check('crimson spawn burns an ember ring', combat.includes("emit('ring', x, y, 'fx-ring-crimson')"));
 check('surge waves burn brighter (state.surgeMod tracked)', combat.includes('state.surgeMod = wave.mod || null;') && combat.includes(" e-surge"));
 check('Well styles: bleeding lanes + ritual seals + sigils + vignette', styles.includes('#board[data-theme="crimson"] .track-line') && styles.includes('.crimson-ritual') && styles.includes('.crimson-runesigil') && styles.includes('.crimson-vignette'));
 check('hostile styles: aura pulse + ember glow + red hull readout', styles.includes('.e-crimson .e-aura') && styles.includes('.e-crimson .e-chassis') && styles.includes('.e-crimson .hp-fill'));

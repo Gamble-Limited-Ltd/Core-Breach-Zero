@@ -45,6 +45,12 @@ function limitToast(entry) {
 
 
 // --- Mission state ----------------------------------------------------------------
+// --- Presentation events ----------------------------------------------------------------
+// The sim reports what happened (rings, floating text, banners, sounds); the view decides how to show it.
+// A headless host (the server) simply registers no handlers. Dispatch is synchronous, so order is unchanged.
+const view = {};
+function emit(type, ...args) { const handler = view[type]; if (handler) handler(...args); }
+
 // Simulation state: plain data only (the part a server can run). Anything that touches the page lives in `ui`.
 const state = {
   mode: 'idle', // idle | vote | countdown | waves | over
@@ -280,9 +286,9 @@ function spawnEnemy(key, pathIdx) {
   enemy.fy = y;
   g.setAttribute('transform', `translate(${x} ${y})`);
   g.classList.add('spawn-in');
-  if (state.protocol === 'crimson') fxRing(x, y, 'fx-ring-crimson'); // the vein spits them out burning
+  if (state.protocol === 'crimson') emit('ring', x, y, 'fx-ring-crimson'); // the vein spits them out burning
   setTimeout(() => g.classList.remove('spawn-in'), 420);
-  if (t.boss) { banner(t.name, '// HOSTILE COMMANDER DETECTED', 'banner-red'); updateBossBar(); }
+  if (t.boss) { emit('banner', t.name, '// HOSTILE COMMANDER DETECTED', 'banner-red'); updateBossBar(); }
   return enemy;
 }
 
@@ -310,7 +316,7 @@ function damageEnemy(enemy, amount, opts = {}) {
     enemy.shielded = true;
     enemy.shield = enemy.maxShield;
     enemy.node.querySelector('.e-shield-ring').classList.add('on');
-    fxRing(...posOf(enemy), 'fx-ring-white');
+    emit('ring', ...posOf(enemy), 'fx-ring-white');
   }
   if (enemy.hp <= 0) killEnemy(enemy, opts.src);
   else paintBars(enemy);
@@ -342,8 +348,8 @@ function killEnemy(enemy, src) {
   state.earned += payout;
   state.kills += 1;
   if (enemy.t.boss) state.bossesKilled += 1;
-  floatText(x, y - enemy.t.size - 6, `+$${payout}`, 'cash-float');
-  fxRing(x, y, 'fx-ring-red');
+  emit('float', x, y - enemy.t.size - 6, `+$${payout}`, 'cash-float');
+  emit('ring', x, y, 'fx-ring-red');
   enemy.node.classList.add('dying');
   setTimeout(() => enemy.node.remove(), 300);
   if (enemy.key === 'bloat' && !enemy.friendly) empPop(x, y); // death rattle — the grid goes dark around the corpse
@@ -361,7 +367,7 @@ function corpseBlossomFeed(enemy, x, y, src) {
     const lvl = trackLevel(tower);
     if (lvl >= 4) {
       tower.lust = (tower.lust || 0) + (effStats(tower).lust || 1);
-      floatText(tower.x, tower.y - 44, `BLOOD LUST ${tower.lust}`, 'lust-float');
+      emit('float', tower.x, tower.y - 44, `BLOOD LUST ${tower.lust}`, 'lust-float');
       if (ui.panelTower === tower) openTowerPanel(tower); // live lust counter
     }
     spawnSummon(enemy, tower, src === 'veins' && lvl >= 2);
@@ -442,15 +448,15 @@ function spawnSummon(enemy, tower, stained) {
   g.addEventListener('pointerenter', (event) => showSummonTip(summon, event));
   g.addEventListener('pointermove', moveTip);
   g.addEventListener('pointerleave', () => hideTip(summon));
-  fxRing(summon.fx, summon.fy, 'fx-ring-virus');
-  floatText(summon.fx, summon.fy - t.size - 10, stained ? 'BLOOD STAINED RISES' : 'RISEN', 'summon-float');
+  emit('ring', summon.fx, summon.fy, 'fx-ring-virus');
+  emit('float', summon.fx, summon.fy - t.size - 10, stained ? 'BLOOD STAINED RISES' : 'RISEN', 'summon-float');
   paintBars(summon);
   return summon;
 }
 
 function despawnSummon(summon) {
   summon.alive = false;
-  fxRing(summon.fx, summon.fy, 'fx-ring-virus');
+  emit('ring', summon.fx, summon.fy, 'fx-ring-virus');
   summon.node.remove();
 }
 
@@ -474,7 +480,7 @@ function contactDamage(summon) {
     if (!summon.pierce) { despawnSummon(summon); return; }
     summon.hitLog[enemy.nid] = state.clock;
     summon.hp -= summon.maxHp * 0.25;
-    fxRing(sx, sy, 'fx-ring-virus');
+    emit('ring', sx, sy, 'fx-ring-virus');
     paintBars(summon);
     if (summon.hp <= 0) { despawnSummon(summon); return; }
   }
@@ -564,12 +570,12 @@ function launchStrikeDrone(tower) {
 function replicateLeak(enemy) {
   enemy.replicated = true;
   const [x, y] = posOf(enemy);
-  fxRing(x, y, 'fx-ring-amber');
+  emit('ring', x, y, 'fx-ring-amber');
   for (let i = 0; i < 6; i++) {
     const spawn = spawnEnemy('file', enemy.pathIdx);
     spawn.dist = Math.min(state.samplers[enemy.pathIdx].len - 8, Math.max(0, enemy.dist - 18 + i * 7));
   }
-  banner('MEMORY LEAK', '// REPLICATION — HOSTILES SPILLED', 'banner-red');
+  emit('banner', 'MEMORY LEAK', '// REPLICATION — HOSTILES SPILLED', 'banner-red');
 }
 
 function leakEnemy(enemy) {
@@ -582,7 +588,7 @@ function leakEnemy(enemy) {
   void board.offsetWidth;
   board.classList.add('core-hit');
   setTimeout(() => board.classList.remove('core-hit'), 550);
-  floatText(...corePos(), `-${leakDmg} CORE`, 'core-float');
+  emit('float', ...corePos(), `-${leakDmg} CORE`, 'core-float');
   updateHud();
   if (enemy.t.boss) updateBossBar();
   if (state.baseHp <= 0 && state.mode === 'waves') endMission(false);
@@ -631,7 +637,7 @@ function fxNukeBlast(x, y) {
       setTimeout(() => ring.remove(), 1400);
     }, delay);
   }
-  fxRing(x, y, 'fx-ring-red');
+  emit('ring', x, y, 'fx-ring-red');
 }
 
 // Blood Purge: crimson shockwave swells to the full curse radius.
@@ -639,7 +645,7 @@ function fxPurgeBlast(tower) {
   const ring = svgNode('circle', { class: 'fx-ring fx-purge-ring', cx: tower.x, cy: tower.y, r: 8 });
   ui.layers.fx.appendChild(ring);
   setTimeout(() => ring.remove(), 950);
-  fxRing(tower.x, tower.y, 'fx-ring-virus');
+  emit('ring', tower.x, tower.y, 'fx-ring-virus');
 }
 
 // Blood Scream: screen-edge crimson vignette + every enraged summon shudders.
@@ -653,7 +659,7 @@ function fxScreamBlast(tower, buffed) {
     summon.node.classList.add('screamed-flash');
     setTimeout(() => summon.node.classList.remove('screamed-flash'), 900);
   }
-  fxRing(tower.x, tower.y, 'fx-ring-virus');
+  emit('ring', tower.x, tower.y, 'fx-ring-virus');
 }
 
 function floatText(x, y, text, cls) {
@@ -661,6 +667,8 @@ function floatText(x, y, text, cls) {
   ui.layers.fx.appendChild(label);
   setTimeout(() => label.remove(), 950);
 }
+
+Object.assign(view, { ring: fxRing, float: floatText, banner, sound: (...a) => playSound(...a), nuke: fxNukeBlast, purge: fxPurgeBlast, scream: fxScreamBlast });
 
 // --- Main loop ------------------------------------------------------------------------
 function tick(ts) {
@@ -673,7 +681,7 @@ function tick(ts) {
   if (state.mode === 'countdown') {
     state.countdown -= dt;
     const n = Math.ceil(state.countdown);
-    if (n !== state.lastCount && n > 0) { state.lastCount = n; banner(String(n), '// DEPLOYING', 'banner-count'); playSound(); }
+    if (n !== state.lastCount && n > 0) { state.lastCount = n; emit('banner', String(n), '// DEPLOYING', 'banner-count'); emit('sound'); }
     if (state.countdown <= 0) beginWave(debugWave > 0 ? Math.min(missionWaves().length - 1, debugWave - 1) : 0);
   }
   if (state.mode === 'waves') runWaves(dt);
@@ -695,16 +703,16 @@ function enrageMult(enemy) {
 }
 
 function empPop(x, y) {
-  fxRing(x, y, 'fx-ring-emp');
+  emit('ring', x, y, 'fx-ring-emp');
   let hit = 0;
   for (const tower of state.towers) {
     if (Math.hypot(tower.x - x, tower.y - y) <= BLOAT_EMP_RADIUS) {
       tower.offlineT = Math.max(tower.offlineT || 0, BLOAT_EMP_SECONDS);
-      fxRing(tower.x, tower.y, 'fx-ring-emp');
+      emit('ring', tower.x, tower.y, 'fx-ring-emp');
       hit += 1;
     }
   }
-  if (hit) floatText(x, y - 20, `EMP POP — ${hit} OFFLINE`, 'emp-float');
+  if (hit) emit('float', x, y - 20, `EMP POP — ${hit} OFFLINE`, 'emp-float');
 }
 
 function moveEnemy(enemy, dt) {
@@ -741,7 +749,7 @@ function moveEnemy(enemy, dt) {
   enemy.node.classList.toggle('e-haste', haste > 1);
   if (enemy.t.boss && enemy.key === 'virus') {
     enemy.pulseTimer -= dt;
-    if (enemy.pulseTimer <= 0) { enemy.pulseTimer = 8; fxRing(...posOf(enemy), 'fx-ring-virus'); }
+    if (enemy.pulseTimer <= 0) { enemy.pulseTimer = 8; emit('ring', ...posOf(enemy), 'fx-ring-virus'); }
   }
   if (enemy.t.regen && enemy.hp < enemy.maxHp) {
     enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * enemy.t.regen * dt);
@@ -753,7 +761,7 @@ function moveEnemy(enemy, dt) {
     if (enemy.cloakT <= 0) {
       enemy.cloaked = !enemy.cloaked;
       enemy.cloakT = enemy.cloaked ? enemy.t.cloak.span : enemy.t.cloak.every;
-      fxRing(...posOf(enemy), 'fx-ring-phantom');
+      emit('ring', ...posOf(enemy), 'fx-ring-phantom');
     }
     enemy.node.classList.toggle('e-cloak', Boolean(enemy.cloaked));
   }
@@ -772,26 +780,26 @@ function moveEnemy(enemy, dt) {
           healed += 1;
         }
       }
-      if (healed) { fxRing(enemy.fx, enemy.fy, 'fx-ring-heal'); floatText(enemy.fx, enemy.fy - enemy.t.size - 8, `SIPHON +${healed}`, 'heal-float'); }
+      if (healed) { emit('ring', enemy.fx, enemy.fy, 'fx-ring-heal'); emit('float', enemy.fx, enemy.fy - enemy.t.size - 8, `SIPHON +${healed}`, 'heal-float'); }
     }
   }
   if (enemy.t.blink) {
     enemy.blinkTimer = (enemy.blinkTimer === undefined ? enemy.t.blink.every : enemy.blinkTimer) - dt;
     if (enemy.blinkTimer <= 0) {
       enemy.blinkTimer = enemy.t.blink.every;
-      fxRing(...posOf(enemy), 'fx-ring-phantom');
+      emit('ring', ...posOf(enemy), 'fx-ring-phantom');
       enemy.dist += enemy.t.blink.jump;
     }
   }
   if (enemy.t.boss && enemy.key === 'warden' && !enemy.stormed && enemy.hp <= enemy.maxHp * 0.6) {
     enemy.stormed = true;
     const lane = state.samplers[enemy.pathIdx];
-    fxRing(...posOf(enemy), 'fx-ring-amber');
+    emit('ring', ...posOf(enemy), 'fx-ring-amber');
     for (let i = 0; i < 4; i++) {
       const spawn = spawnEnemy('hexbug', enemy.pathIdx);
       spawn.dist = Math.min(lane.len - 8, Math.max(0, enemy.dist - 18 + i * 9));
     }
-    banner('FIREWALL WARDEN', '// PACKET STORM — HEX CRAWLERS SPILLED', 'banner-red');
+    emit('banner', 'FIREWALL WARDEN', '// PACKET STORM — HEX CRAWLERS SPILLED', 'banner-red');
   }
   enemy.dist = Math.max(0, enemy.dist - (enemy.pull || 0) * dt);
   enemy.dist += enemy.speed * haste * enrageMult(enemy) * wardenYardMult(enemy) * tarMult(enemy) * (1 - (enemy.slow || 0)) * (1 - (enemy.gravSlow || 0)) * dt;
@@ -800,12 +808,12 @@ function moveEnemy(enemy, dt) {
     if (enemy.usedGates.has(event.index)) continue;
     if (event.from.pathIdx === enemy.pathIdx && enemy.dist >= event.from.dist) {
       const [gx, gy] = [event.gate.x, event.gate.y];
-      fxRing(gx, gy, 'fx-ring-gate');
+      emit('ring', gx, gy, 'fx-ring-gate');
       enemy.pathIdx = event.to.pathIdx;
       enemy.dist = event.to.dist + 2;
       enemy.usedGates.add(event.index);
-      fxRing(event.gate.toX, event.gate.toY, 'fx-ring-gate');
-      playSound('hover');
+      emit('ring', event.gate.toX, event.gate.toY, 'fx-ring-gate');
+      emit('sound', 'hover');
       return moveEnemy(enemy, 0);
     }
   }
@@ -836,7 +844,7 @@ function runWaves(dt) {
       const income = effStats(tower).income || 0;
       if (!income) continue;
       rigYield += income;
-      floatText(tower.x, tower.y - 40, `+$${income} RIG`, 'cash-float');
+      emit('float', tower.x, tower.y - 40, `+$${income} RIG`, 'cash-float');
     }
     // WAR BONDS: the war chest compounds — interest rolls INTO the bond itself
     // (it never touches the wallet until the commander withdraws).
@@ -848,7 +856,7 @@ function runWaves(dt) {
       const interest = Math.min(Math.max(0, cap - tower.bank), Math.round(tower.bank * es.bond));
       if (interest <= 0) continue;
       tower.bank += interest;
-      floatText(tower.x, tower.y - 40, `+$${interest} BOND`, 'cash-float');
+      emit('float', tower.x, tower.y - 40, `+$${interest} BOND`, 'cash-float');
       if (ui.panelTower === tower) openTowerPanel(tower);
     }
     const hardMult = state.protocol === 'hard' ? 0.85 : state.protocol === 'insane' ? 0.7 : state.protocol === 'crimson' ? 0.7 : 1; // HELL PAYS WORSE — salvage is blood in HARD, the DOUBLED SPIRAL pays 70%, and the dawn bleeds you for 70%
@@ -858,11 +866,11 @@ function runWaves(dt) {
     const cleared = state.waveIndex + 1;
     if (window.CBZPerks && CBZPerks.has('fieldrep') && state.baseHp < BASE_MAX) {
       state.baseHp = Math.min(BASE_MAX, state.baseHp + 2);
-      floatText(...corePos(), '+2 FIELD REPAIRS', 'repair-float');
+      emit('float', ...corePos(), '+2 FIELD REPAIRS', 'repair-float');
     }
     if (cleared >= missionWaves().length) { endMission(true); return; }
-    banner(`WAVE ${cleared} CLEARED`, rigYield ? `// +$${bonus} SALVAGE · RIG YIELD $${rigYield}` : `// +$${bonus} SALVAGE`, 'banner-green');
-    playSound();
+    emit('banner', `WAVE ${cleared} CLEARED`, rigYield ? `// +$${bonus} SALVAGE · RIG YIELD $${rigYield}` : `// +$${bonus} SALVAGE`, 'banner-green');
+    emit('sound');
     state.intermission = state.protocol === 'crimson' ? 3 : state.protocol === 'insane' ? 2.5 : state.protocol === 'hard' ? 4.5 : 7; // HARD: 4.5s to rebuild — the swarm never waits. DOUBLED INSANE: 2.5s. CRIMSON: 3s
     updateHud();
   }
@@ -896,7 +904,7 @@ function beginWave(index) {
   state.queue = queue;
   state.spawnGap = 0;
   state.spawnSide = 0;
-  banner(`WAVE ${String(index + 1).padStart(2, '0')} / ${waves.length}`, surge ? `// ${surge.label} — ${surge.note}` : wave.phase ? `// ${wave.phase}` : '// HOSTILES INBOUND', 'banner-wave');
+  emit('banner', `WAVE ${String(index + 1).padStart(2, '0')} / ${waves.length}`, surge ? `// ${surge.label} — ${surge.note}` : wave.phase ? `// ${wave.phase}` : '// HOSTILES INBOUND', 'banner-wave');
   updateHud();
 }
 
@@ -935,7 +943,7 @@ function ensureHud() {
       state.speed2x = !state.speed2x;
       btn.textContent = state.speed2x ? 'TIME x2' : 'TIME x1';
       btn.classList.toggle('on', state.speed2x);
-      playSound();
+      emit('sound');
     });
     ui.speedBtn = btn;
   }
@@ -953,12 +961,12 @@ function ensureHud() {
     btn.hidden = true;
     btn.addEventListener('click', () => {
       const rig = readyRig();
-      if (!rig) { playSound('alarm'); showToast('Nuclear strike needs the rig at Tier 6 — Nuclear Fall Out.'); return; }
+      if (!rig) { emit('sound', 'alarm'); showToast('Nuclear strike needs the rig at Tier 6 — Nuclear Fall Out.'); return; }
       if (ui.nukeAim) { setNukeAim(false); return; }
-      if ((rig.nukeCd || 0) > 0) { playSound('alarm'); showToast(`Nuke recharging — ${Math.ceil(rig.nukeCd)}s left.`); return; }
-      if (state.cash < NUKE_COST) { playSound('alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); return; }
+      if ((rig.nukeCd || 0) > 0) { emit('sound', 'alarm'); showToast(`Nuke recharging — ${Math.ceil(rig.nukeCd)}s left.`); return; }
+      if (state.cash < NUKE_COST) { emit('sound', 'alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); return; }
       setNukeAim(true);
-      playSound();
+      emit('sound');
     });
     ui.nukeBtn = btn;
   }
@@ -1041,7 +1049,7 @@ function paintNukeButton() {
 function fireNuke(x, y) {
   const rig = readyRig();
   if (!rig || (rig.nukeCd || 0) > 0) { setNukeAim(false); return; }
-  if (state.cash < NUKE_COST) { playSound('alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); setNukeAim(false); return; }
+  if (state.cash < NUKE_COST) { emit('sound', 'alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); setNukeAim(false); return; }
   state.cash -= NUKE_COST;
   rig.nukeCd = NUKE_COOLDOWN;
   setNukeAim(false);
@@ -1054,9 +1062,9 @@ function fireNuke(x, y) {
   const node = svgNode('circle', { class: 'fx-waste', cx: x, cy: y, r: WASTE_RADIUS });
   ui.layers.fx.appendChild(node);
   state.wasteZones.push({ x, y, r: WASTE_RADIUS, until: state.clock + WASTE_SECONDS, node });
-  fxNukeBlast(x, y);
-  floatText(x, y - NUKE_RADIUS - 20, 'NUCLEAR FALL OUT', 'core-float');
-  playSound('alarm');
+  emit('nuke', x, y);
+  emit('float', x, y - NUKE_RADIUS - 20, 'NUCLEAR FALL OUT', 'core-float');
+  emit('sound', 'alarm');
   updateHud();
 }
 
@@ -1064,7 +1072,7 @@ function fireNuke(x, y) {
 function bloodPurge(tower) {
   if (trackLevel(tower) < 4) return;
   const lust = tower.lust || 0;
-  if (lust <= 0) { playSound('alarm'); showToast('Blood Lust bar is empty — kills feed it.'); return; }
+  if (lust <= 0) { emit('sound', 'alarm'); showToast('Blood Lust bar is empty — kills feed it.'); return; }
   const rng = effStats(tower).rng;
   let hits = 0;
   for (const enemy of state.enemies) {
@@ -1073,9 +1081,9 @@ function bloodPurge(tower) {
     if (Math.hypot(px - tower.x, py - tower.y) <= rng) { damageEnemy(enemy, lust, { src: 'purge' }); hits += 1; }
   }
   tower.lust = 0;
-  fxPurgeBlast(tower);
-  floatText(tower.x, tower.y - 52, `BLOOD PURGE — ${lust} DMG`, 'lust-float');
-  playSound();
+  emit('purge', tower);
+  emit('float', tower.x, tower.y - 52, `BLOOD PURGE — ${lust} DMG`, 'lust-float');
+  emit('sound');
   openTowerPanel(tower);
   updateHud();
 }
@@ -1094,9 +1102,9 @@ function bloodScream(tower) {
     buffed += 1;
   }
   tower.screamCd = 200;
-  fxScreamBlast(tower, buffed);
-  banner('BLOOD SCREAM', buffed ? `// ${buffed} SUMMONS ENRAGED — 2x HP · +150% SPEED` : '// NO SUMMONS ON THE FIELD', 'banner-red');
-  playSound();
+  emit('scream', tower, buffed);
+  emit('banner', 'BLOOD SCREAM', buffed ? `// ${buffed} SUMMONS ENRAGED — 2x HP · +150% SPEED` : '// NO SUMMONS ON THE FIELD', 'banner-red');
+  emit('sound');
   openTowerPanel(tower);
 }
 
@@ -1221,11 +1229,11 @@ function showVote(context) {
   ui.votePanel = panel;
   panel.querySelector('#vote-cancel').addEventListener('click', () => { closeVote(); restoreRecon(); });
   panel.querySelectorAll('.mode-card:not(.locked)').forEach((card) => card.addEventListener('click', () => castVote(card.dataset.mode)));
-  playSound();
+  emit('sound');
 }
 
 function castVote(mode) {
-  playSound();
+  emit('sound');
   state.myVote = mode;
   launchCombat(mode);
 }
@@ -1286,7 +1294,7 @@ function launchCombat(mode) {
   state.lastCount = 4;
   ui.last = performance.now();
   ui.raf = requestAnimationFrame(tick);
-  playSound();
+  emit('sound');
 }
 
 function restoreRecon() {
@@ -1384,8 +1392,8 @@ function endMission(win, fromSync = false) {
   if (!eventMode) panel.querySelector('#end-redeploy').addEventListener('click', () => { panel.remove(); ui.endPanel = null; resetBoard(); startMission(state.map); });
   panel.querySelector('#end-bay').addEventListener('click', () => { resetBoard(); restoreRecon(); openMenu('play'); });
   notifyRoomEnded();
-  banner(win ? 'SECTOR CLEARED' : 'CORE BREACHED', win ? '// VICTORY TOKEN EARNED' : '// EVACUATE', win ? 'banner-green' : 'banner-red');
-  playSound();
+  emit('banner', win ? 'SECTOR CLEARED' : 'CORE BREACHED', win ? '// VICTORY TOKEN EARNED' : '// EVACUATE', win ? 'banner-green' : 'banner-red');
+  emit('sound');
 }
 
 function resetBoard() {
@@ -1474,13 +1482,13 @@ function toggleBuild(id) {
   const entry = window.CBZShop && CBZShop.TOWERS.find((item) => item.id === id);
   if (!entry) return;
   const limit = towerLimit();
-  if (state.towers.length >= limit) { playSound('alarm'); showToast(`Command grid saturated — ${limit} units max at ${window.CBZ_ROOM_PLAYERS || 1} commander(s).`); return; }
+  if (state.towers.length >= limit) { emit('sound', 'alarm'); showToast(`Command grid saturated — ${limit} units max at ${window.CBZ_ROOM_PLAYERS || 1} commander(s).`); return; }
   if (limitReached(entry)) {
-    playSound('alarm');
+    emit('sound', 'alarm');
     showToast(limitToast(entry));
     return;
   }
-  if (state.cash < entry.cost) { playSound('alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return; }
+  if (state.cash < entry.cost) { emit('sound', 'alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return; }
   setBuilding(entry);
 }
 
@@ -1500,7 +1508,7 @@ function setBuilding(entry) {
     ui.ghost.remove();
     ui.ghost = null;
   }
-  playSound('hover');
+  emit('sound', 'hover');
 }
 
 // --- Placement engine: anywhere on the grid, clearance boxes enforce spacing -----------
@@ -1588,18 +1596,18 @@ function paintGhost(x, y) {
 }
 
 function rejectPlace(x, y, reason) {
-  floatText(x, y - 20, `✕ ${reason}`, 'block-float');
-  playSound('alarm');
+  emit('float', x, y - 20, `✕ ${reason}`, 'block-float');
+  emit('sound', 'alarm');
 }
 
 function placeTower(entry, x, y) {
-  if (state.towers.length >= towerLimit()) { playSound('alarm'); showToast(`Command grid saturated — ${towerLimit()} units max.`); return false; }
+  if (state.towers.length >= towerLimit()) { emit('sound', 'alarm'); showToast(`Command grid saturated — ${towerLimit()} units max.`); return false; }
   if (limitReached(entry)) {
-    playSound('alarm');
+    emit('sound', 'alarm');
     showToast(limitToast(entry));
     return false;
   }
-  if (state.cash < entry.cost) { playSound('alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return false; }
+  if (state.cash < entry.cost) { emit('sound', 'alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return false; }
   state.cash -= entry.cost;
   const node = towerNode(entry, x, y);
   ui.layers.towers.appendChild(node);
@@ -1619,13 +1627,13 @@ function placeTower(entry, x, y) {
     node.classList.add('tw-on-pad');
     const padNode = document.querySelector(`[data-pad="${pad[0]},${pad[1]}"]`);
     if (padNode) padNode.classList.add('occupied');
-    floatText(x, y - 46, 'AA PAD LINKED', 'aa-float');
+    emit('float', x, y - 46, 'AA PAD LINKED', 'aa-float');
   }
   state.towers.push(tower);
   node.classList.add('placed');
   setTimeout(() => node.classList.remove('placed'), 620);
-  floatText(x, y - 34, `-$${entry.cost}`, 'cash-float');
-  playSound();
+  emit('float', x, y - 34, `-$${entry.cost}`, 'cash-float');
+  emit('sound');
   updateHud();
   return true;
 }
@@ -1867,19 +1875,19 @@ function relayMult(tower, kind) {
 function castRally(tower) {
   if (trackLevel(tower) < 5) return;
   const es = effStats(tower);
-  if ((tower.rallyCd || 0) > 0) { playSound('alarm'); showToast(`Rally recharging — ${Math.ceil(tower.rallyCd)}s left.`); return; }
+  if ((tower.rallyCd || 0) > 0) { emit('sound', 'alarm'); showToast(`Rally recharging — ${Math.ceil(tower.rallyCd)}s left.`); return; }
   const cost = es.rallyCost || 600;
-  if (state.cash < cost) { playSound('alarm'); showToast(`Need $${cost} salvage for RALLY CRY.`); return; }
+  if (state.cash < cost) { emit('sound', 'alarm'); showToast(`Need $${cost} salvage for RALLY CRY.`); return; }
   state.cash -= cost;
   tower.rallyCd = es.rallyCd || 45;
   let boosted = 0;
   for (const other of state.towers) {
     if (other === tower) continue;
-    if (Math.hypot(other.x - tower.x, other.y - tower.y) <= es.rng) { other.rallyT = 6; boosted += 1; fxRing(other.x, other.y, 'fx-ring-amber'); }
+    if (Math.hypot(other.x - tower.x, other.y - tower.y) <= es.rng) { other.rallyT = 6; boosted += 1; emit('ring', other.x, other.y, 'fx-ring-amber'); }
   }
-  floatText(tower.x, tower.y - 46, `RALLY CRY — ${boosted} BOOSTED`, 'lust-float');
-  fxRing(tower.x, tower.y, 'fx-ring-amber');
-  playSound();
+  emit('float', tower.x, tower.y - 46, `RALLY CRY — ${boosted} BOOSTED`, 'lust-float');
+  emit('ring', tower.x, tower.y, 'fx-ring-amber');
+  emit('sound');
   openTowerPanel(tower);
   updateHud();
 }
@@ -1929,8 +1937,8 @@ function launchWardenSoul(tower) {
   g.addEventListener('pointerenter', (event) => showSummonTip(soul, event));
   g.addEventListener('pointermove', moveTip);
   g.addEventListener('pointerleave', () => hideTip(soul));
-  fxRing(sx, sy, 'fx-ring-crimson');
-  floatText(sx, sy - 24, 'A SOUL RISES FROM THE CORE', 'summon-float');
+  emit('ring', sx, sy, 'fx-ring-crimson');
+  emit('float', sx, sy - 24, 'A SOUL RISES FROM THE CORE', 'summon-float');
   paintBars(soul);
   return true;
 }
@@ -1938,14 +1946,14 @@ function launchWardenSoul(tower) {
 function castSoul(tower) {
   if (trackLevel(tower) < 6) return;
   const es = effStats(tower);
-  if ((tower.soulCd || 0) > 0) { playSound('alarm'); showToast(`The choir rests — ${Math.ceil(tower.soulCd)}s until the next hymn.`); return; }
+  if ((tower.soulCd || 0) > 0) { emit('sound', 'alarm'); showToast(`The choir rests — ${Math.ceil(tower.soulCd)}s until the next hymn.`); return; }
   const cost = es.soulCost || 900;
-  if (state.cash < cost) { playSound('alarm'); showToast(`Need $${cost} salvage to raise a soul from the core.`); return; }
-  if (!state.enemies.some((enemy) => enemy.alive && !enemy.friendly)) { playSound('alarm'); showToast('The choir needs an audience — no hostiles on the grid.'); return; }
+  if (state.cash < cost) { emit('sound', 'alarm'); showToast(`Need $${cost} salvage to raise a soul from the core.`); return; }
+  if (!state.enemies.some((enemy) => enemy.alive && !enemy.friendly)) { emit('sound', 'alarm'); showToast('The choir needs an audience — no hostiles on the grid.'); return; }
   state.cash -= cost;
   tower.soulCd = es.soulCd || 45;
   launchWardenSoul(tower);
-  playSound();
+  emit('sound');
   openTowerPanel(tower);
   updateHud();
 }
@@ -1976,14 +1984,14 @@ function buyTrack(tower) {
   const lvl = trackLevel(tower);
   if (lvl >= tiers.length) return;
   const tier = tiers[lvl];
-  if (state.cash < tier.cost) { playSound('alarm'); showToast(`Need $${tier.cost} salvage for ${tier.label}.`); return; }
+  if (state.cash < tier.cost) { emit('sound', 'alarm'); showToast(`Need $${tier.cost} salvage for ${tier.label}.`); return; }
   state.cash -= tier.cost;
   tower.lvl = lvl + 1;
-  if (tower.id === 'zeroday' && tower.lvl >= 6) { showToast('NUCLEAR FALL OUT ARMED — the rig can call the strike.'); playSound('alarm'); }
+  if (tower.id === 'zeroday' && tower.lvl >= 6) { showToast('NUCLEAR FALL OUT ARMED — the rig can call the strike.'); emit('sound', 'alarm'); }
   paintTowerRange(tower);
-  floatText(tower.x, tower.y - 42, `${tier.label} ONLINE`, 'up-float');
-  fxRing(tower.x, tower.y, 'fx-ring-white');
-  playSound();
+  emit('float', tower.x, tower.y - 42, `${tier.label} ONLINE`, 'up-float');
+  emit('ring', tower.x, tower.y, 'fx-ring-white');
+  emit('sound');
   updateHud();
   openTowerPanel(tower); // re-render the panel with the new tier installed
 }
@@ -2157,9 +2165,9 @@ function sellTower(tower) {
   state.towers = state.towers.filter((item) => item !== tower);
   const [x, y] = [tower.x, tower.y];
   closeTowerPanel();
-  floatText(x, y - 20, `+$${refund} SALVAGED`, 'cash-float');
-  fxRing(x, y, 'fx-ring-amber');
-  playSound();
+  emit('float', x, y - 20, `+$${refund} SALVAGED`, 'cash-float');
+  emit('ring', x, y, 'fx-ring-amber');
+  emit('sound');
   updateHud();
 }
 
@@ -2197,7 +2205,7 @@ function updateTowers(dt) {
             const burst = svgNode('circle', { class: 'fx-ring fx-veins-burst', cx: tx, cy: ty, r: 6 });
             ui.layers.fx.appendChild(burst);
             setTimeout(() => burst.remove(), 620);
-            fxRing(tx, ty, 'fx-ring-virus');
+            emit('ring', tx, ty, 'fx-ring-virus');
             for (const enemy of pool) {
               const [px, py] = posOf(enemy);
               if (Math.hypot(px - tx, py - ty) <= 55) damageEnemy(enemy, es.veins, { src: 'veins' });
@@ -2233,9 +2241,9 @@ function updateTowers(dt) {
           }
         }
         if (toll) {
-          fxRing(tower.x, tower.y, 'fx-ring-crimson');
-          floatText(tower.x, tower.y - 46, `DEATH TOLL — ${toll} CAUGHT`, 'lust-float');
-          playSound();
+          emit('ring', tower.x, tower.y, 'fx-ring-crimson');
+          emit('float', tower.x, tower.y - 46, `DEATH TOLL — ${toll} CAUGHT`, 'lust-float');
+          emit('sound');
         }
       }
     }
@@ -2258,7 +2266,7 @@ function updateTowers(dt) {
           const shell = svgNode('circle', { class: 'fx-shell', r: 4, cx: tower.x, cy: tower.y });
           ui.layers.fx.appendChild(shell);
           state.projectiles.push({ kind: 'shell', x: tower.x, y: tower.y, tx: lx, ty: ly, speed: 240, dmg: es.lobDmg || 140, splash: es.lobSplash || 50, node: shell });
-          fxRing(tower.x, tower.y, 'fx-ring-amber');
+          emit('ring', tower.x, tower.y, 'fx-ring-amber');
         }
       }
     }
@@ -2413,7 +2421,7 @@ function fragBurst(tower, target, dealt) {
     const [px, py] = posOf(enemy);
     if (Math.hypot(px - tx, py - ty) <= radius) { damageEnemy(enemy, Math.max(1, Math.round(dealt * frag)), { src: 'frag' }); hit += 1; }
   }
-  if (hit) fxRing(tx, ty, 'fx-ring-amber');
+  if (hit) emit('ring', tx, ty, 'fx-ring-amber');
 }
 
 // --- DEATHWARRANT: the apex verdict --------------------------------------------------
@@ -2440,8 +2448,8 @@ function beginWarrantCharge(tower, target, es) {
   ui.layers.fx.appendChild(lock);
   tower.charge = { nid: target.nid, x: px, y: py, t: es.warrantCd || 12, fx: { ring, lock, line } };
   tower.node.classList.add('tw-charging');
-  floatText(tower.x, tower.y - 52, 'VERDICT LOCKED', 'core-float');
-  playSound('alarm');
+  emit('float', tower.x, tower.y - 52, 'VERDICT LOCKED', 'core-float');
+  emit('sound', 'alarm');
 }
 
 function dropWarrantCharge(tower) {
@@ -2459,9 +2467,9 @@ function fireWarrant(tower, target, es) {
   damageEnemy(target, payload, { phase: true, src: 'warrant' });
   fireLine(tower, target, 'fx-warrant', 7.5);
   fireLine(tower, target, 'fx-warrant-core', 2.6);
-  fxRing(tx, ty, 'fx-ring-white');
-  fxRing(tx, ty, 'fx-ring-crimson');
-  floatText(tx, ty - target.t.size - 12, `ANNIHILATED −${payload}`, 'core-float');
+  emit('ring', tx, ty, 'fx-ring-white');
+  emit('ring', tx, ty, 'fx-ring-crimson');
+  emit('float', tx, ty - target.t.size - 12, `ANNIHILATED −${payload}`, 'core-float');
   tower.warrantCd = es.warrantCd || 12;
   if (es.echo && !target.alive) {
     // DEATH ECHO — the kill detonates: everything near the corpse eats a
@@ -2471,9 +2479,9 @@ function fireWarrant(tower, target, es) {
       const [px, py] = posOf(enemy);
       if (Math.hypot(px - tx, py - ty) <= 90) damageEnemy(enemy, Math.round(target.maxHp * 0.2), { phase: true, src: 'echo' });
     }
-    fxRing(tx, ty, 'fx-ring-amber');
+    emit('ring', tx, ty, 'fx-ring-amber');
   }
-  playSound();
+  emit('sound');
 }
 
 // --- THE VETERAN: instant free gun switch -------------------------------------------
@@ -2482,9 +2490,9 @@ function switchGun(tower) {
   tower.heat = 0;
   tower.heatNid = null;
   paintTowerRange(tower);
-  fxRing(tower.x, tower.y, 'fx-ring-white');
-  floatText(tower.x, tower.y - 44, `${effStats(tower).gunName || 'BATTLE RIFLE'} UP`, 'up-float');
-  playSound();
+  emit('ring', tower.x, tower.y, 'fx-ring-white');
+  emit('float', tower.x, tower.y - 44, `${effStats(tower).gunName || 'BATTLE RIFLE'} UP`, 'up-float');
+  emit('sound');
   openTowerPanel(tower);
 }
 
@@ -2492,13 +2500,13 @@ function switchGun(tower) {
 function bondDeposit(tower) {
   const es = effStats(tower);
   const cap = es.bondCap || 3000;
-  if ((tower.bank || 0) >= cap) { playSound('alarm'); showToast(`The bond is full — $${formatCash(cap)} cap. Withdraw or upgrade the ledger.`); return; }
-  if (state.cash < 500) { playSound('alarm'); showToast('Need $500 salvage to feed the bond.'); return; }
+  if ((tower.bank || 0) >= cap) { emit('sound', 'alarm'); showToast(`The bond is full — $${formatCash(cap)} cap. Withdraw or upgrade the ledger.`); return; }
+  if (state.cash < 500) { emit('sound', 'alarm'); showToast('Need $500 salvage to feed the bond.'); return; }
   const amount = Math.min(500, cap - (tower.bank || 0));
   state.cash -= amount;
   tower.bank = (tower.bank || 0) + amount;
-  floatText(tower.x, tower.y - 44, `+$${amount} BONDED`, 'cash-float');
-  playSound();
+  emit('float', tower.x, tower.y - 44, `+$${amount} BONDED`, 'cash-float');
+  emit('sound');
   updateHud();
   openTowerPanel(tower);
 }
@@ -2508,9 +2516,9 @@ function bondWithdraw(tower) {
   if (amount <= 0) return;
   tower.bank = 0;
   state.cash += amount;
-  floatText(tower.x, tower.y - 44, `+$${amount} WITHDRAWN`, 'cash-float');
-  fxRing(tower.x, tower.y, 'fx-ring-amber');
-  playSound();
+  emit('float', tower.x, tower.y - 44, `+$${amount} WITHDRAWN`, 'cash-float');
+  emit('ring', tower.x, tower.y, 'fx-ring-amber');
+  emit('sound');
   updateHud();
   openTowerPanel(tower);
 }
@@ -2565,7 +2573,7 @@ function fireTower(tower, target) {
         ui.layers.fx.appendChild(pellet);
         setTimeout(() => pellet.remove(), 300);
       }
-      fxRing(tx, ty, 'fx-ring-amber');
+      emit('ring', tx, ty, 'fx-ring-amber');
       break;
     }
     case 'sniper': {
@@ -2573,7 +2581,7 @@ function fireTower(tower, target) {
       // no projectile phase, just a bright rail line and a red impact ring.
       damageEnemy(target, dmg);
       fireLine(tower, target, 'fx-sniper', 1.6);
-      fxRing(tx, ty, 'fx-ring-red');
+      emit('ring', tx, ty, 'fx-ring-red');
       fragBurst(tower, target, dmg);
       break;
     }
@@ -2605,7 +2613,7 @@ function fireTower(tower, target) {
           if (Math.hypot(px - tx, py - ty) <= flak) damageEnemy(enemy, Math.round(dmg * 0.5));
         }
       }
-      fxRing(tx, ty, 'fx-ring-amber');
+      emit('ring', tx, ty, 'fx-ring-amber');
       fragBurst(tower, target, dmg);
       break;
     }
@@ -2617,7 +2625,7 @@ function fireTower(tower, target) {
       const missile = svgNode('circle', { class: 'fx-shell fx-missile', r: 5, cx: tower.x, cy: tower.y });
       ui.layers.fx.appendChild(missile);
       state.projectiles.push({ kind: 'missile', x: tower.x, y: tower.y, tx, ty, speed: 210, dmg, splash: es.splash || 55, cluster: es.cluster || 0, node: missile });
-      fxRing(tower.x, tower.y, 'fx-ring-amber');
+      emit('ring', tower.x, tower.y, 'fx-ring-amber');
       break;
     }
     case 'virus': {
@@ -2629,12 +2637,12 @@ function fireTower(tower, target) {
       const es = effStats(tower);
       if (es.corrupt && !target.friendly) {
         target.corrupt = { dps: es.corrupt, t: 5 };
-        fxRing(tx, ty, 'fx-ring-virus');
+        emit('ring', tx, ty, 'fx-ring-virus');
       }
       const slash = svgNode('line', { class: 'fx-line fx-tracer fx-slash', x1: tower.x, y1: tower.y, x2: tx, y2: ty, 'stroke-width': 3 });
       ui.layers.fx.appendChild(slash);
       setTimeout(() => slash.remove(), 160);
-      fxRing(tx, ty, 'fx-ring-virus');
+      emit('ring', tx, ty, 'fx-ring-virus');
       fragBurst(tower, target, dmg);
       break;
     }
@@ -2646,12 +2654,12 @@ function fireTower(tower, target) {
       const headsmanShot = target.t.boss ? dmg : Math.max(1, Math.round(dmg * (es.chaffPct || 0.15)));
       damageEnemy(target, headsmanShot);
       fireLine(tower, target, 'fx-sniper', 2.6);
-      fxRing(tx, ty, 'fx-ring-red');
+      emit('ring', tx, ty, 'fx-ring-red');
       fragBurst(tower, target, headsmanShot);
       if (target.alive && target.t.boss && target.key !== 'overseer' && target.hp <= target.maxHp * (es.execute || 0.15)) {
         damageEnemy(target, 999999999, { phase: true, src: 'execute' });
-        floatText(tx, ty - target.t.size - 12, 'EXECUTED', 'core-float');
-        fxRing(tx, ty, 'fx-ring-crimson');
+        emit('float', tx, ty - target.t.size - 12, 'EXECUTED', 'core-float');
+        emit('ring', tx, ty, 'fx-ring-crimson');
       }
       break;
     }
@@ -2664,7 +2672,7 @@ function fireTower(tower, target) {
       // the relic's shot should read as a piece of the dawn, not a tracer.
       fireLine(tower, target, 'fx-dawn-halo', 6.5);
       fireLine(tower, target, 'fx-dawn', 2.6);
-      fxRing(tx, ty, 'fx-ring-amber');
+      emit('ring', tx, ty, 'fx-ring-amber');
       const burn = effStats(tower).splash || 0;
       if (burn > 0) {
         for (const enemy of state.enemies) {
@@ -2696,14 +2704,14 @@ function fireTower(tower, target) {
           ui.layers.fx.appendChild(pellet);
           setTimeout(() => pellet.remove(), 300);
         }
-        fxRing(tx, ty, 'fx-ring-amber');
+        emit('ring', tx, ty, 'fx-ring-amber');
         break;
       }
       if (es.gunName === 'LONGRIFLE') {
         const shot = target.t.boss ? Math.round(dmg * (es.bossMult || 1.4)) : dmg;
         damageEnemy(target, shot, { armorPierce: true });
         fireLine(tower, target, 'fx-sniper', 2);
-        fxRing(tx, ty, 'fx-ring-red');
+        emit('ring', tx, ty, 'fx-ring-red');
         fragBurst(tower, target, shot);
         break;
       }
@@ -2736,7 +2744,7 @@ function updateProjectiles(dt) {
         p.x = p.tx;
         p.y = p.ty;
         p.dead = true;
-        fxRing(p.tx, p.ty, 'fx-ring-red');
+        emit('ring', p.tx, p.ty, 'fx-ring-red');
         for (const enemy of state.enemies) {
           if (!enemy.alive) continue;
           const [px, py] = posOf(enemy);
@@ -2745,7 +2753,7 @@ function updateProjectiles(dt) {
         // MIRV PROTOCOL: the shell cracks open — cluster bomblets pepper a wide
         // secondary ring around the impact crater for partial damage (35% post-nerf).
         if (p.cluster) {
-          fxRing(p.tx, p.ty, 'fx-ring-amber');
+          emit('ring', p.tx, p.ty, 'fx-ring-amber');
           for (const enemy of state.enemies) {
             if (!enemy.alive) continue;
             const [px, py] = posOf(enemy);
@@ -2797,7 +2805,7 @@ board.addEventListener('click', (event) => {
     if (!verdict.ok) { rejectPlace(x, y, verdict.reason); return; }
     if (coopGuest()) {
       coopIntent({ a: 'place', id: ui.building.id, x, y });
-      floatText(x, y - 20, 'SYNC → SQUAD LEAD', 'sync-float');
+      emit('float', x, y - 20, 'SYNC → SQUAD LEAD', 'sync-float');
       setBuilding(null);
       return;
     }
@@ -2897,7 +2905,7 @@ function coopApplySync(snap) {
   state.earned = snap.er;
   if (snap.sq && snap.sq !== state.lastSyncSeq) {
     state.lastSyncSeq = snap.sq;
-    if (snap.st) banner(snap.st, '// SQUAD LINK', 'banner-wave');
+    if (snap.st) emit('banner', snap.st, '// SQUAD LINK', 'banner-wave');
   }
   // Towers appear as the host builds them; ladder installs repaint their rings.
   const seenTowers = new Set();
