@@ -2,6 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 const { WebSocketServer } = require('ws');
 
 const port = Number(process.env.PORT || 3000);
@@ -12,7 +13,12 @@ const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
 };
+const compressible = new Set(['.css', '.html', '.js', '.json', '.svg']);
+const gzipCache = new Map(); // filePath -> { etag, body }
 
 // --- Commander accounts (persisted to accounts.json) ---------------------------
 const NAME_RE = /^[A-Za-z0-9_-]{3,16}$/;
@@ -495,7 +501,8 @@ async function handleApi(request, response, pathname) {
 }
 
 const server = http.createServer((request, response) => {
-  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+  const reqUrl = new URL(request.url, `http://${request.headers.host}`);
+  const pathname = reqUrl.pathname;
   if (pathname.startsWith('/api/')) {
     handleApi(request, response, pathname);
     return;
@@ -519,11 +526,30 @@ const server = http.createServer((request, response) => {
       response.writeHead(error.code === 'ENOENT' ? 404 : 500).end('Not found');
       return;
     }
-    response.writeHead(200, {
-      'content-type': mimeTypes[path.extname(filePath)] || 'application/octet-stream',
+    const ext = path.extname(filePath);
+    const etag = `"${crypto.createHash('sha1').update(content).digest('base64url')}"`;
+    // ?v= assets never change under that URL; html always revalidates; other assets (art) for a day.
+    const cache = ext === '.html' ? 'no-cache' : reqUrl.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=86400';
+    const headers = {
+      'content-type': mimeTypes[ext] || 'application/octet-stream',
       'x-content-type-options': 'nosniff',
-    });
-    response.end(content);
+      'cache-control': cache,
+      etag,
+      vary: 'accept-encoding',
+    };
+    if (request.headers['if-none-match'] === etag) {
+      response.writeHead(304, headers).end();
+      return;
+    }
+    let body = content;
+    if (compressible.has(ext) && content.length > 1024 && /\bgzip\b/.test(request.headers['accept-encoding'] || '')) {
+      let hit = gzipCache.get(filePath);
+      if (!hit || hit.etag !== etag) { hit = { etag, body: zlib.gzipSync(content) }; gzipCache.set(filePath, hit); }
+      body = hit.body;
+      headers['content-encoding'] = 'gzip';
+    }
+    response.writeHead(200, headers);
+    response.end(body);
   });
 });
 

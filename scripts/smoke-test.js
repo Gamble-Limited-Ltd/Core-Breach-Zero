@@ -134,6 +134,16 @@ function wsConnect() {
   guest.close();
   stranger.close();
 
+  // ASSETS AND CACHING: mime types, cache headers, ETag 304, gzip.
+  const html = await fetch(`${BASE}/`, { headers: { 'accept-encoding': 'gzip' } });
+  check('html revalidates (no-cache) and is gzipped', html.headers.get('cache-control') === 'no-cache' && html.headers.get('content-encoding') === 'gzip');
+  const appjs = await fetch(`${BASE}/app.js?v=1`);
+  check('?v= script is immutable and has an ETag', /immutable/.test(appjs.headers.get('cache-control') || '') && !!appjs.headers.get('etag'));
+  const again = await fetch(`${BASE}/app.js?v=1`, { headers: { 'if-none-match': appjs.headers.get('etag') } });
+  check('matching If-None-Match gives 304', again.status === 304);
+  const art = await fetch(`${BASE}/assets/towers/sentinel.webp`);
+  check('tower art is image/webp with a day of cache', art.headers.get('content-type') === 'image/webp' && /max-age=86400/.test(art.headers.get('cache-control') || ''));
+
   console.log(`\nRESULT: ${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 })().catch((error) => { console.error('SMOKE TEST CRASH:', error); process.exit(1); });

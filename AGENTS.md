@@ -12,7 +12,7 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - `app.js`: menus, accounts, rooms, offline LOCAL mode.
 - `combat.js`: the in-match game.
 - `shop.js`: the Nexus Shop UI (economy is mirrored in `server.js`: keep them in sync).
-- `server.js`: static files, account/shop/room API, WebSocket rooms.
+- `server.js`: static files (ETag, gzip, Cache-Control: `?v=` assets are immutable, html revalidates, art caches a day), account/shop/room API, WebSocket rooms.
 - `scripts/`: tests (`*-test.js`), `run-tests.js` (what `npm test` runs), `qa-*.sh` browser QA.
 - `terms.html`: draft Terms of Service.
 
@@ -28,6 +28,7 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - Account linking and leaderboards must stay open-ended: do not hardcode the account model or score storage in a way that blocks a future leaderboard or GLL ID/GATE login.
 - Keep the glowing home-screen menus and their look.
 - Keep `README.md`, `AGENTS.md` and `CLAUDE.md` current in the same commit as the change.
+- Tower art is 512px WebP in `assets/towers/`; keep new art at that size and format.
 - Bump the `?v=` cache-bust string in `index.html` when you change `app.js`, `combat.js`, `shop.js` or `styles.css`.
 
 ## Working together

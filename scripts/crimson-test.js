@@ -28,7 +28,7 @@ function extractLiteral(src, name) {
 
 console.log('--- Crimson clock (app.js) ---');
 const appjs = read('app.js');
-check('BUILD bumped to 2026.11.05', appjs.includes("const BUILD = '2026.11.05';"));
+check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
 check('deadline is a fixed UTC instant (static-host safe)', appjs.includes("Date.parse('2026-10-30T18:00:00Z')"));
 check('192h gate: window is 7 days after unlock', appjs.includes("Date.parse('2026-11-06T18:00:00Z')"));
 check('phase machine: sealed -> live -> passed', /now >= CRIMSON_END\).*passed[\s\S]*?now >= CRIMSON_DEADLINE\).*live[\s\S]*?return 'sealed'/.test(appjs));
@@ -103,14 +103,14 @@ check('LOCAL loadout link heals the armory before the bay check', /path === '\/a
 check('civilian grant is name-gated (admin roster only)', appjs.includes("new Set(['JACKSONLOOMIS-COMMITS'])") && serverjs.includes("new Set(['JACKSONLOOMIS-COMMITS'])"));
 check('UPDATE LOG leads with DAWN CLEARANCE, then INSANE ERA', appjs.indexOf("version: '2026.10.31', tag: 'DAWN CLEARANCE'") >= 0 && appjs.indexOf("version: '2026.10.31'") < appjs.indexOf("version: '2026.10.30'"));
 check('event clock untouched by the decrypt (sealed until T-0 for everyone else)', appjs.includes("Date.parse('2026-10-30T18:00:00Z')") && appjs.includes("Date.parse('2026-11-06T18:00:00Z')"));
-check('relic ships with its own decal, wired into the card', shopjs.includes("art: 'assets/towers/dawnbreaker.png'") && fs.existsSync(path.join(ROOT, 'assets/towers/dawnbreaker.png')));
+check('relic ships with its own decal, wired into the card', shopjs.includes("art: 'assets/towers/dawnbreaker.webp'") && fs.existsSync(path.join(ROOT, 'assets/towers/dawnbreaker.webp')));
 
 console.log('--- Shell + styles ---');
 const indexhtml = read('index.html');
 const styles = read('styles.css');
 check('menu button ??? with crimson subtext', indexhtml.includes('data-menu="crimson"') && indexhtml.includes('???</strong>') && indexhtml.includes('The Crimson Dawn Approaches'));
 check('countdown line lives on the button', indexhtml.includes('id="crimson-count"'));
-check('all 6 assets cache-busted to 20261024m', (indexhtml.match(/\?v=20261024m/g) || []).length === 6);
+check('all 6 assets cache-busted to 20261024n', (indexhtml.match(/\?v=20261024n/g) || []).length === 6);
 check('eerie glow styles: menu pulse + big countdown + deploy button', styles.includes('.menu-item.menu-crimson') && styles.includes('.crimson-big') && styles.includes('.crimson-deploy'));
 check('dawn beam style for the relic', styles.includes('.fx-dawn'));
 check('footer brands the Well', indexhtml.includes('THE CRIMSON WELL IS OPEN'));
