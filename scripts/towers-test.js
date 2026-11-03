@@ -82,7 +82,7 @@ check('SNIPER rail trimmed (150 / 215 / 330)', sn.track[1].sets.dmg === 150 && s
 check('sniper rng + targeting untouched by the nerf', sn.track[0].sets.targeting === 'maxhp' && sn.track[4].sets.rng === 350 && sn.track[4].sets.rate === 0.4);
 
 console.log('--- Combat wiring (combat.js) ---');
-const combat = read('combat.js');
+const combat = [read('combat.js'), read('src/combat/data.js')].join('\n');
 check('MISSILE SILO tracks air natively (no pad needed)', combat.includes("missilesilo: { air: 'yes' }"));
 check('SHREDDER is ground-only with pad AA', combat.includes("shredder: { air: 'no' }"));
 check('SHREDDER spits a chip-stream (fx-chip tracer)', combat.includes("case 'shredder':") && combat.includes("fireLine(tower, target, 'fx-chip'"));
@@ -120,7 +120,7 @@ for (const wave of HARD_WAVES) for (const [key, count] of wave.groups) {
 check('escalated HARD ladder still validates (keys + mods + counts)', badKeys.size === 0, [...badKeys].join(','));
 
 console.log('--- Shop mirrors (LOCAL + server) ---');
-const appjs = ['src/app/update-log.js', 'app.js', 'src/app/progression.js', 'src/app/maps.js'].map(read).join('\n');
+const appjs = ['src/app/update-log.js', 'app.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js'].map(read).join('\n');
 const serverjs = read('server.js');
 const localShop = extractLiteral(appjs, 'SHOP');
 const serverShop = extractLiteral(serverjs, 'SHOP');
@@ -390,8 +390,8 @@ check('old hardcoded admin code is gone from app + server', !appjs.includes('ADM
 check('ADMIN_KEY_CODE env gates the admin code on the server', serverjs.includes('process.env.ADMIN_KEY_CODE') && serverjs.includes('ADMIN_KEY_CODE.length >= 8'));
 
 console.log('--- Syntax gates ---');
-for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js']) {
-  try { require('child_process').execSync((f === 'app.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
+for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js']) {
+  try { require('child_process').execSync((f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
 
