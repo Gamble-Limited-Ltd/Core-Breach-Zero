@@ -241,27 +241,91 @@ function shapeFor(key, t) {
   return nodes;
 }
 
-// --- Spawning / damage / death -------------------------------------------------------
-function spawnEnemy(key, pathIdx) {
-  const t = ENEMY_TYPES[key];
-  const g = svgNode('g', { class: `enemy e-${key}${t.boss ? ' e-boss' : ''}${state.protocol === 'crimson' ? ` e-crimson${state.surgeMod ? ' e-surge' : ''}` : ''}` });
-  // Shapes live in an inner chassis so CSS spawn/death/hover animations can scale or
-  // bob them freely — a CSS transform on this outer group would override the
-  // per-frame position attribute and teleport the unit toward the board corner.
+// --- Enemy view -------------------------------------------------------------------------
+// Enemies are plain data. One SVG group per enemy id lives here: built on first sight, posed from
+// fx/fy/angle and status fields every tick, retired when the sim marks the enemy dead (fate).
+const enemyViews = new Map();
+
+function buildEnemyView(enemy) {
+  const { key, t } = enemy;
+  let g;
+  let barW = 22;
   const chassis = svgNode('g', { class: 'e-chassis' });
-  for (const node of shapeFor(key, t)) chassis.appendChild(node);
+  if (key === 'soul') {
+    g = svgNode('g', { class: 'enemy e-summon e-soul' });
+    chassis.appendChild(svgNode('circle', { class: 'soul-halo', r: 11 }));
+    chassis.appendChild(svgNode('circle', { class: 'soul-core', r: 5 }));
+    chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: -2, cy: -1.4, r: 1.2 }));
+    chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: 2.4, cy: -1.4, r: 1.2 }));
+  } else {
+    if (key === 'drone') g = svgNode('g', { class: 'enemy e-summon e-drone e-strike' });
+    else if (enemy.friendly) g = svgNode('g', { class: `enemy e-summon e-${key}` });
+    else {
+      barW = t.boss ? 34 : 22;
+      g = svgNode('g', { class: `enemy e-${key}${t.boss ? ' e-boss' : ''}${state.protocol === 'crimson' ? ` e-crimson${state.surgeMod ? ' e-surge' : ''}` : ''}` });
+    }
+    for (const node of shapeFor(key, t)) chassis.appendChild(node);
+  }
+  // Shapes live in an inner chassis so CSS spawn/death/hover animations can scale or bob them
+  // freely: a CSS transform on this outer group would override the per-frame position attribute.
   g.appendChild(chassis);
   // The dawn marks its own: a pulsing crimson aura ring orbits every hostile.
-  if (state.protocol === 'crimson') g.insertBefore(svgNode('circle', { class: 'e-aura', r: t.size + 7 }), chassis);
+  if (!enemy.friendly && state.protocol === 'crimson') g.insertBefore(svgNode('circle', { class: 'e-aura', r: t.size + 7 }), chassis);
   const barY = -(t.size + 13);
-  const barW = t.boss ? 34 : 22;
   g.appendChild(svgNode('rect', { class: 'hp-bg', x: -barW / 2, y: barY, width: barW, height: 3.4 }));
   const fill = svgNode('rect', { class: 'hp-fill', x: -barW / 2, y: barY, width: barW, height: 3.4 });
   g.appendChild(fill);
-  const shieldFill = svgNode('rect', { class: 'shield-fill', x: -barW / 2, y: barY - 4, width: 0, height: 2.4 });
-  g.appendChild(shieldFill);
+  let shieldFill = fill;
+  if (!enemy.friendly) {
+    shieldFill = svgNode('rect', { class: 'shield-fill', x: -barW / 2, y: barY - 4, width: 0, height: 2.4 });
+    g.appendChild(shieldFill);
+  }
+  const tipIn = enemy.friendly ? showSummonTip : showTip;
+  g.addEventListener('pointerenter', (event) => tipIn(enemy, event));
+  g.addEventListener('pointermove', moveTip);
+  g.addEventListener('pointerleave', () => hideTip(enemy));
+  ui.layers.enemies.appendChild(g);
+  if (key !== 'drone') {
+    g.classList.add('spawn-in');
+    setTimeout(() => g.classList.remove('spawn-in'), 420);
+  }
+  return { g, fill, shieldFill, barW };
+}
+
+function renderEnemies() {
+  if (!ui.layers) return;
+  const seen = new Set();
+  for (const enemy of state.enemies) {
+    if (enemy.guest) continue;
+    seen.add(enemy.nid);
+    let v = enemyViews.get(enemy.nid);
+    if (!v) { v = buildEnemyView(enemy); v.enemy = enemy; enemyViews.set(enemy.nid, v); }
+    const spin = enemy.flight && !enemy.friendly ? ` rotate(${enemy.angle.toFixed(1)})` : enemy.key === 'runner' ? ` rotate(${enemy.angle.toFixed(1)})` : '';
+    v.g.setAttribute('transform', `translate(${enemy.fx.toFixed(1)} ${enemy.fy.toFixed(1)})${spin}`);
+    v.g.classList.toggle('e-stunned', enemy.stun > 0);
+    v.g.classList.toggle('e-haste', Boolean(enemy.hasted));
+    v.g.classList.toggle('e-cloak', Boolean(enemy.cloaked));
+    if (enemy.shielded) { const ring = v.g.querySelector('.e-shield-ring'); if (ring) ring.classList.add('on'); }
+  }
+  for (const [nid, v] of enemyViews) {
+    const enemy = v.enemy;
+    if (enemy.alive && !seen.has(nid)) { v.g.remove(); enemyViews.delete(nid); continue; } // mission reset dropped it
+    if (enemy.alive) {
+      v.fill.setAttribute('width', (v.barW * enemy.hp) / enemy.maxHp);
+      v.fill.classList.toggle('low', enemy.hp / enemy.maxHp < 0.35);
+      v.shieldFill.setAttribute('width', enemy.maxShield ? (v.barW * enemy.shield) / enemy.maxShield : 0);
+    } else {
+      if (enemy.fate === 'dying') { v.g.classList.add('dying'); setTimeout(() => v.g.remove(), 300); } else v.g.remove();
+      enemyViews.delete(nid);
+    }
+  }
+}
+
+// --- Spawning / damage / death -------------------------------------------------------
+function spawnEnemy(key, pathIdx) {
+  const t = ENEMY_TYPES[key];
   const enemy = {
-    key, t, node: g, fill, shieldFill,
+    key, t,
     nid: ++state.nidSeq,
     // Wave pressure: HP scales per wave index, surge modifiers stack on top.
     // Easy relief: commanders (bosses) spawn with slightly less hull on EASY.
@@ -276,18 +340,11 @@ function spawnEnemy(key, pathIdx) {
     enemy.flight = { sx, sy, tx, ty, total: Math.max(1, Math.hypot(tx - sx, ty - sy)) };
     enemy.dist = debugFreeze ? Math.min(enemy.flight.total * 0.85, 260 + Math.random() * 480) : 0;
   }
-  g.addEventListener('pointerenter', (event) => showTip(enemy, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(enemy));
-  ui.layers.enemies.appendChild(g);
   state.enemies.push(enemy);
   const [x, y] = enemy.flight ? flightPos(enemy, enemy.dist) : state.samplers[pathIdx].at(enemy.dist);
   enemy.fx = x;
   enemy.fy = y;
-  g.setAttribute('transform', `translate(${x} ${y})`);
-  g.classList.add('spawn-in');
   if (state.protocol === 'crimson') emit('ring', x, y, 'fx-ring-crimson'); // the vein spits them out burning
-  setTimeout(() => g.classList.remove('spawn-in'), 420);
   if (t.boss) { emit('banner', t.name, '// HOSTILE COMMANDER DETECTED', 'banner-red'); updateBossBar(); }
   return enemy;
 }
@@ -315,14 +372,12 @@ function damageEnemy(enemy, amount, opts = {}) {
   if (enemy.key === 'overseer' && !enemy.shielded && enemy.hp <= enemy.maxHp * 0.25) {
     enemy.shielded = true;
     enemy.shield = enemy.maxShield;
-    enemy.node.querySelector('.e-shield-ring').classList.add('on');
     emit('ring', ...posOf(enemy), 'fx-ring-white');
   }
   if (enemy.hp <= 0) killEnemy(enemy, opts.src);
-  else paintBars(enemy);
 }
 
-function paintBars(enemy) {
+function paintGuestBars(enemy) {
   const barW = enemy.t.boss ? 34 : 22;
   enemy.fill.setAttribute('width', (barW * enemy.hp) / enemy.maxHp);
   enemy.fill.classList.toggle('low', enemy.hp / enemy.maxHp < 0.35);
@@ -335,8 +390,7 @@ function killEnemy(enemy, src) {
   hideTip(enemy);
   if (enemy.friendly) {
     // Summons expire quietly — no bounty, no kill credit, no Blossom chains.
-    enemy.node.classList.add('dying');
-    setTimeout(() => enemy.node.remove(), 300);
+    enemy.fate = 'dying';
     return;
   }
   // Zero Day tier-5 skim: enemy bounties pay +10% while the rig runs that tier.
@@ -350,8 +404,7 @@ function killEnemy(enemy, src) {
   if (enemy.t.boss) state.bossesKilled += 1;
   emit('float', x, y - enemy.t.size - 6, `+$${payout}`, 'cash-float');
   emit('ring', x, y, 'fx-ring-red');
-  enemy.node.classList.add('dying');
-  setTimeout(() => enemy.node.remove(), 300);
+  enemy.fate = 'dying';
   if (enemy.key === 'bloat' && !enemy.friendly) empPop(x, y); // death rattle — the grid goes dark around the corpse
   corpseBlossomFeed(enemy, x, y, src);
   graveWardenFeed(enemy, x, y);
@@ -410,16 +463,8 @@ function spawnSummon(enemy, tower, stained) {
   // rises at 60% of ~50,000, not 60% of its 2,400 paper hull.
   const bonus = stained ? 50 + (es.stainedPct ? Math.round(enemy.maxHp * 0.1) : 0) : 0;
   const hp = Math.max(1, Math.round(enemy.maxHp * (es.summonHp || 0.3)) + bonus);
-  const g = svgNode('g', { class: `enemy e-summon e-${enemy.key}` });
-  const chassis = svgNode('g', { class: 'e-chassis' });
-  for (const node of shapeFor(enemy.key, t)) chassis.appendChild(node);
-  g.appendChild(chassis);
-  const barY = -(t.size + 13);
-  g.appendChild(svgNode('rect', { class: 'hp-bg', x: -11, y: barY, width: 22, height: 3.4 }));
-  const fill = svgNode('rect', { class: 'hp-fill', x: -11, y: barY, width: 22, height: 3.4 });
-  g.appendChild(fill);
   const summon = {
-    key: enemy.key, t, node: g, fill, shieldFill: fill, nid: ++state.nidSeq,
+    key: enemy.key, t, nid: ++state.nidSeq,
     hp, maxHp: hp, shield: 0, maxShield: t.shield || 0,
     pathIdx: enemy.pathIdx, dist: enemy.dist || 0,
     speed: t.speed * 0.85, alive: true, friendly: true, reverse: true,
@@ -437,27 +482,17 @@ function spawnSummon(enemy, tower, stained) {
     summon.fx = px;
     summon.fy = py;
   }
-  g.setAttribute('transform', `translate(${summon.fx.toFixed(1)} ${summon.fy.toFixed(1)})`);
-  const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: summon.fx, cy: summon.fy, r: 6 });
-  ui.layers.fx.appendChild(bloom);
-  setTimeout(() => bloom.remove(), 720);
-  g.classList.add('spawn-in');
-  setTimeout(() => g.classList.remove('spawn-in'), 420);
-  ui.layers.enemies.appendChild(g);
   state.enemies.push(summon);
-  g.addEventListener('pointerenter', (event) => showSummonTip(summon, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(summon));
+  emit('bloom', summon.fx, summon.fy, 6);
   emit('ring', summon.fx, summon.fy, 'fx-ring-virus');
   emit('float', summon.fx, summon.fy - t.size - 10, stained ? 'BLOOD STAINED RISES' : 'RISEN', 'summon-float');
-  paintBars(summon);
   return summon;
 }
 
 function despawnSummon(summon) {
   summon.alive = false;
+  summon.fate = 'gone';
   emit('ring', summon.fx, summon.fy, 'fx-ring-virus');
-  summon.node.remove();
 }
 
 // Summons mow the lane: every hostile they touch takes damage equal to the
@@ -481,7 +516,6 @@ function contactDamage(summon) {
     summon.hitLog[enemy.nid] = state.clock;
     summon.hp -= summon.maxHp * 0.25;
     emit('ring', sx, sy, 'fx-ring-virus');
-    paintBars(summon);
     if (summon.hp <= 0) { despawnSummon(summon); return; }
   }
 }
@@ -494,7 +528,6 @@ function moveSummon(summon, dt) {
     const [fx, fy] = flightPos(summon, summon.dist);
     summon.fx = fx;
     summon.fy = fy;
-    summon.node.setAttribute('transform', `translate(${fx.toFixed(1)} ${fy.toFixed(1)})`);
     contactDamage(summon);
     return;
   }
@@ -503,7 +536,6 @@ function moveSummon(summon, dt) {
   const [x, y] = state.samplers[summon.pathIdx].at(summon.dist);
   summon.fx = x;
   summon.fy = y;
-  summon.node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
   contactDamage(summon);
 }
 
@@ -536,17 +568,9 @@ function launchStrikeDrone(tower) {
     [aimX, aimY] = state.samplers[prey.pathIdx].at(future);
   }
   const t = { ...ENEMY_TYPES.drone, hp: Math.max(1, Math.round(es.drone || 70)), bounty: 0, dmg: 0, name: 'STRIKE DRONE', ability: 'One-way strike unit — detonates on the first hostile it intercepts.' };
-  const g = svgNode('g', { class: 'enemy e-summon e-drone e-strike' });
-  const chassis = svgNode('g', { class: 'e-chassis' });
-  for (const node of shapeFor('drone', t)) chassis.appendChild(node);
-  g.appendChild(chassis);
-  const barY = -(t.size + 13);
-  g.appendChild(svgNode('rect', { class: 'hp-bg', x: -11, y: barY, width: 22, height: 3.4 }));
-  const fill = svgNode('rect', { class: 'hp-fill', x: -11, y: barY, width: 22, height: 3.4 });
-  g.appendChild(fill);
   const total = Math.max(1, Math.hypot(aimX - tower.x, aimY - tower.y));
   const drone = {
-    key: 'drone', t, node: g, fill, shieldFill: fill, nid: ++state.nidSeq,
+    key: 'drone', t, nid: ++state.nidSeq,
     hp: t.hp, maxHp: t.hp, shield: 0, maxShield: 0,
     pathIdx: prey.pathIdx, dist: 0,
     speed: Math.max(110, t.speed * 1.5), alive: true, friendly: true, reverse: true,
@@ -554,16 +578,8 @@ function launchStrikeDrone(tower) {
     flight: { sx: tower.x, sy: tower.y, tx: aimX, ty: aimY, total },
     fx: tower.x, fy: tower.y,
   };
-  g.setAttribute('transform', `translate(${tower.x.toFixed(1)} ${tower.y.toFixed(1)})`);
-  const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: tower.x, cy: tower.y, r: 6 });
-  ui.layers.fx.appendChild(bloom);
-  setTimeout(() => bloom.remove(), 720);
-  ui.layers.enemies.appendChild(g);
   state.enemies.push(drone);
-  g.addEventListener('pointerenter', (event) => showSummonTip(drone, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(drone));
-  paintBars(drone);
+  emit('bloom', tower.x, tower.y, 6);
   return true;
 }
 
@@ -581,7 +597,7 @@ function replicateLeak(enemy) {
 function leakEnemy(enemy) {
   enemy.alive = false;
   hideTip(enemy);
-  enemy.node.remove();
+  enemy.fate = 'gone';
   const leakDmg = leakDamage(enemy);
   state.baseHp = Math.max(0, state.baseHp - leakDmg);
   board.classList.remove('core-hit');
@@ -656,8 +672,7 @@ function fxScreamBlast(tower, buffed) {
   setTimeout(() => vignette.remove(), 1100);
   for (const summon of state.enemies) {
     if (!summon.alive || !summon.friendly) continue;
-    summon.node.classList.add('screamed-flash');
-    setTimeout(() => summon.node.classList.remove('screamed-flash'), 900);
+    emit('flash', summon);
   }
   emit('ring', tower.x, tower.y, 'fx-ring-virus');
 }
@@ -668,6 +683,8 @@ function floatText(x, y, text, cls) {
   setTimeout(() => label.remove(), 950);
 }
 
+view.bloom = (x, y, r) => { const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: x, cy: y, r }); ui.layers.fx.appendChild(bloom); setTimeout(() => bloom.remove(), 720); };
+view.flash = (summon) => { const v = enemyViews.get(summon.nid); if (!v) return; v.g.classList.add('screamed-flash'); setTimeout(() => v.g.classList.remove('screamed-flash'), 900); };
 Object.assign(view, { ring: fxRing, float: floatText, banner, sound: (...a) => playSound(...a), nuke: fxNukeBlast, purge: fxPurgeBlast, scream: fxScreamBlast });
 
 // --- Main loop ------------------------------------------------------------------------
@@ -691,6 +708,7 @@ function tick(ts) {
   updateTowers(dt);
   updateProjectiles(dt);
   renderProjectiles();
+  renderEnemies();
   if (coopHost()) {
     state.syncT -= dt;
     if (state.syncT <= 0) { state.syncT = 0.12; coopBroadcast(); }
@@ -721,10 +739,8 @@ function moveEnemy(enemy, dt) {
   if (debugFreeze || state.mode !== 'waves') return;
   if (enemy.stun > 0) {
     enemy.stun -= dt;
-    enemy.node.classList.add('e-stunned');
     return;
   }
-  enemy.node.classList.remove('e-stunned');
   if (enemy.tarT) enemy.tarT -= dt; // tar slick linger decays fast
   if (enemy.corrupt && enemy.corrupt.t > 0) {
     // VIRUS CONTAGION: phase burn ticks every frame; kills credit the strain.
@@ -743,18 +759,17 @@ function moveEnemy(enemy, dt) {
     const heading = (Math.atan2(fy - py, fx - px) * 180) / Math.PI;
     enemy.fx = fx;
     enemy.fy = fy;
-    enemy.node.setAttribute('transform', `translate(${fx.toFixed(1)} ${fy.toFixed(1)}) rotate(${heading.toFixed(1)})`);
+    enemy.angle = heading;
     return;
   }
   const haste = inHasteZone(enemy.pathIdx, enemy.dist) ? 1.3 : 1;
-  enemy.node.classList.toggle('e-haste', haste > 1);
+  enemy.hasted = haste > 1;
   if (enemy.t.boss && enemy.key === 'virus') {
     enemy.pulseTimer -= dt;
     if (enemy.pulseTimer <= 0) { enemy.pulseTimer = 8; emit('ring', ...posOf(enemy), 'fx-ring-virus'); }
   }
   if (enemy.t.regen && enemy.hp < enemy.maxHp) {
     enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * enemy.t.regen * dt);
-    paintBars(enemy);
   }
   // NULL SPECTRE: phase shroud cycles — cloaked spans drop every targeting lock.
   if (enemy.t.cloak) {
@@ -764,7 +779,6 @@ function moveEnemy(enemy, dt) {
       enemy.cloakT = enemy.cloaked ? enemy.t.cloak.span : enemy.t.cloak.every;
       emit('ring', ...posOf(enemy), 'fx-ring-phantom');
     }
-    enemy.node.classList.toggle('e-cloak', Boolean(enemy.cloaked));
   }
   // DATA LEECH: siphon field — every second, hostiles near the leech knit hull back.
   if (enemy.t.heal) {
@@ -777,7 +791,6 @@ function moveEnemy(enemy, dt) {
         const [ox, oy] = posOf(other);
         if (Math.hypot(ox - enemy.fx, oy - enemy.fy) <= enemy.t.heal.radius) {
           other.hp = Math.min(other.maxHp, other.hp + other.maxHp * enemy.t.heal.pct);
-          paintBars(other);
           healed += 1;
         }
       }
@@ -823,7 +836,6 @@ function moveEnemy(enemy, dt) {
   const [px, py] = sampler.at(Math.max(0, enemy.dist - 6));
   const angle = (Math.atan2(y - py, x - px) * 180) / Math.PI;
   if (Math.abs(angle - enemy.angle) > 1) enemy.angle = angle;
-  enemy.node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})${enemy.key === 'runner' ? ` rotate(${enemy.angle.toFixed(1)})` : ''}`);
 }
 
 function runWaves(dt) {
@@ -833,7 +845,6 @@ function runWaves(dt) {
       const key = state.queue.shift();
       const enemy = spawnEnemy(key, state.spawnSide++ % state.samplers.length);
       state.spawnGap = SPAWN_GAP[key] || 0.8;
-      paintBars(enemy);
     }
   } else if (!state.enemies.some((enemy) => enemy.alive && !enemy.friendly) && state.intermission <= 0) {
     // Income pass: cleared waves pay build money. Rates trimmed — the upgrade
@@ -1099,7 +1110,6 @@ function bloodScream(tower) {
     summon.hp *= 2;
     summon.speed *= 2.5;
     summon.screamed = true;
-    paintBars(summon);
     buffed += 1;
   }
   tower.screamCd = 200;
@@ -1905,20 +1915,9 @@ function launchWardenSoul(tower) {
   const prey = pool.reduce((best, enemy) => (enemy.dist > best.dist ? enemy : best));
   const hull = Math.max(60, 10 * (tower.tollCharges || 0));
   const t = { name: 'VENGEFUL SOUL', tag: 'SUMMON', hp: hull, speed: 55, size: 12, bounty: 0, dmg: 0, color: '#bff1e2', ability: 'The Warden\u2019s choir — detonates on the first hostile it touches for damage equal to its hull. Hull = 10 x TOLL CHARGES.' };
-  const g = svgNode('g', { class: 'enemy e-summon e-soul' });
-  const chassis = svgNode('g', { class: 'e-chassis' });
-  chassis.appendChild(svgNode('circle', { class: 'soul-halo', r: 11 }));
-  chassis.appendChild(svgNode('circle', { class: 'soul-core', r: 5 }));
-  chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: -2, cy: -1.4, r: 1.2 }));
-  chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: 2.4, cy: -1.4, r: 1.2 }));
-  g.appendChild(chassis);
-  const barY = -(t.size + 13);
-  g.appendChild(svgNode('rect', { class: 'hp-bg', x: -11, y: barY, width: 22, height: 3.4 }));
-  const fill = svgNode('rect', { class: 'hp-fill', x: -11, y: barY, width: 22, height: 3.4 });
-  g.appendChild(fill);
   const lane = state.samplers[prey.pathIdx];
   const soul = {
-    key: 'soul', t, node: g, fill, shieldFill: fill, nid: ++state.nidSeq,
+    key: 'soul', t, nid: ++state.nidSeq,
     hp: hull, maxHp: hull, shield: 0, maxShield: 0,
     pathIdx: prey.pathIdx, dist: Math.max(0, lane.len - 4),
     speed: t.speed, alive: true, friendly: true, reverse: true,
@@ -1927,20 +1926,10 @@ function launchWardenSoul(tower) {
   const [sx, sy] = lane.at(soul.dist);
   soul.fx = sx;
   soul.fy = sy;
-  g.setAttribute('transform', `translate(${sx.toFixed(1)} ${sy.toFixed(1)})`);
-  const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: sx, cy: sy, r: 8 });
-  ui.layers.fx.appendChild(bloom);
-  setTimeout(() => bloom.remove(), 720);
-  g.classList.add('spawn-in');
-  setTimeout(() => g.classList.remove('spawn-in'), 420);
-  ui.layers.enemies.appendChild(g);
   state.enemies.push(soul);
-  g.addEventListener('pointerenter', (event) => showSummonTip(soul, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(soul));
+  emit('bloom', sx, sy, 8);
   emit('ring', sx, sy, 'fx-ring-crimson');
   emit('float', sx, sy - 24, 'A SOUL RISES FROM THE CORE', 'summon-float');
-  paintBars(soul);
   return true;
 }
 
@@ -2976,7 +2965,7 @@ function coopApplySync(snap) {
     if (enemy.hp !== hp || enemy.shield !== shield) {
       enemy.hp = hp;
       enemy.shield = shield;
-      paintBars(enemy);
+      paintGuestBars(enemy);
     }
   }
   for (const [nid, enemy] of state.guestMap) {

@@ -27,7 +27,7 @@ const EVERY = 300;
     window.cancelAnimationFrame = () => {};
     window.__step = (n) => { for (let i = 0; i < n; i += 1) { now += 1000 / 60; const q = queue; queue = []; q.forEach((cb) => cb(now)); } };
   });
-  await page.goto(`${BASE}/?cash=2000`);
+  await page.goto(`${BASE}/?cash=2000${process.env.GOLDEN_QUERY || ""}`); // GOLDEN_QUERY=&cbzwave=12 explores other waves (view check only; do not --update)
   await page.waitForFunction(() => window.CBZShop && window.CBZCombat);
   const id = 'G' + Date.now().toString(36).toUpperCase();
   if (TOWER) {
@@ -64,6 +64,9 @@ const EVERY = 300;
   for (let f = 0; f < FRAMES; f += EVERY) {
     await page.evaluate((n) => window.__step(n), EVERY);
     const st = await page.evaluate(() => { const s = CBZCombat.stats(); delete s.towersDetail; return s; });
+    // View check (not part of the golden): every live enemy has exactly one SVG group.
+    const nodes = await page.evaluate(() => document.querySelectorAll('g.enemy:not(.dying)').length);
+    if (nodes !== st.enemies) { console.log(`VIEW MISMATCH at frame ${f + EVERY}: ${nodes} nodes, ${st.enemies} enemies`); process.exit(1); }
     out.push({ frame: f + EVERY, ...st });
   }
   await browser.close();

@@ -237,7 +237,7 @@ check('deploy caps are count-based (limitReached + limitToast)', combat.includes
 check('both deploy gates run the count check', (combat.match(/limitReached\(entry\)/g) || []).length >= 2 && !combat.includes('state.towers.some((tower) => tower.id === entry.id)'));
 check('fire-control skips friendly summons', /let pool = state\.enemies\.filter\(\(enemy\) => \{[\s\S]{0,220}if \(enemy\.friendly\) return false;/.test(combat));
 check('dawn splash skips friendlies too', combat.includes('if (!enemy.alive || enemy === target || enemy.friendly) continue;'));
-check('summon intel trimmed to name + tag + live HP (allegiance rows purged)', combat.includes('function showSummonTip(summon, event)') && (combat.match(/showSummonTip\(/g) || []).length >= 3 && combat.includes("'CORPSE BLOSSOM SPAWN'") && combat.includes("'DRONE SPAWNER PAYLOAD'") && !combat.includes('ALLEGIANCE') && !combat.includes('CONTACT DMG'));
+check('summon intel trimmed to name + tag + live HP (allegiance rows purged)', combat.includes('function showSummonTip(summon, event)') && (combat.match(/showSummonTip\b/g) || []).length >= 2 && combat.includes("'CORPSE BLOSSOM SPAWN'") && combat.includes("'DRONE SPAWNER PAYLOAD'") && !combat.includes('ALLEGIANCE') && !combat.includes('CONTACT DMG'));
 check('friendly tip shows live HP only (allegiance rows purged)', !combat.includes('ALLEGIANCE') && !combat.includes('TOWERS IGNORE IT</b>'));
 check('ledger reconcile floor in both sanitizers (heal up, never down)', /if \(back > \(meta\.totalXp \|\| 0\)\) meta\.totalXp = back;/.test(serverjs) && /if \(back > \(meta\.totalXp \|\| 0\)\) meta\.totalXp = back;/.test(appjs) && /if \(back > \(legacy\.totalXp \|\| 0\)\) legacy\.totalXp = back;/.test(serverjs));
 check('vault panel labels the next-core bar + reassures the ledger', shopjs.includes('PROGRESS INTO THE NEXT CORE') && shopjs.includes('banking one never resets or spends your TOTAL XP'));
@@ -263,7 +263,7 @@ const soulTier = warden && warden.track[5];
 check('SOUL CHOIR rebalanced ($5,200 tier, $850 a soul, 40s hymns)', soulTier && soulTier.label === 'SOUL CHOIR' && soulTier.cost === 5200 && soulTier.sets.soul === 1 && soulTier.sets.soulCost === 850 && soulTier.sets.soulCd === 40);
 check('soul summon wired: launchWardenSoul + castSoul + core rise float', combat.includes('function launchWardenSoul(tower)') && combat.includes('function castSoul(tower)') && combat.includes("'A SOUL RISES FROM THE CORE'") && combat.includes("lane.len - 4"));
 check('soul hull forges from the yard: 10 x TOLL CHARGES (min 60)', combat.includes('Math.max(60, 10 * (tower.tollCharges || 0))'));
-check('soul rides the summon pipeline (friendly + reverse + kamikaze)', combat.includes("key: 'soul', t, node: g, fill, shieldFill: fill") && combat.includes('friendly: true, reverse: true,'));
+check('soul rides the summon pipeline (friendly + reverse + kamikaze)', combat.includes("key: 'soul', t, nid") && combat.includes('friendly: true, reverse: true,'));
 check('soul hover intel: GRAVE WARDEN CHOIR tag wired', combat.includes("'GRAVE WARDEN CHOIR'") && combat.includes("'VENGEFUL SOUL'"));
 check('warden panel shows SOUL CHOIR row + SUMMON SOUL ability', combat.includes('<span>SOUL CHOIR</span>') && combat.includes('SUMMON SOUL — $') && combat.includes("id=\"tp-soul\""));
 check('warden soulCd ticks in upkeep', combat.includes('tower.soulCd = Math.max(0, (tower.soulCd || 0) - dt);'));
@@ -300,7 +300,7 @@ check('four elite classes registered (spectre cloak / leech heal / bloat / rampa
 check('elite silhouettes wired (shroud / siphon arcs / blisters / berserk spikes)', combat.includes("class: 'e-ghost e-shroud'") && combat.includes("class: 'e-siphon'") && combat.includes("class: 'e-blister'") && /key === 'rampager'/.test(combat));
 check('spawn gaps cover the four elites', combat.includes('spectre: 0.7, leech: 1.6, bloat: 1.9, rampager: 2.4'));
 check('phase shroud drops targeting locks (pool filter + pad stickiness guard)', combat.includes('if (enemy.cloaked) return false; // NULL SPECTRE phase shroud') && combat.includes('tower.target.t.flying && !tower.target.cloaked'));
-check('cloak state machine cycles in moveEnemy', combat.includes("enemy.node.classList.toggle('e-cloak', Boolean(enemy.cloaked));"));
+check('cloak state machine cycles in moveEnemy', combat.includes("v.g.classList.toggle('e-cloak', Boolean(enemy.cloaked));"));
 check('leech siphon field pulses + heals + paints bars', combat.includes('enemy.healT = (enemy.healT === undefined ? enemy.t.heal.every : enemy.healT) - dt;') && combat.includes("emit('ring', enemy.fx, enemy.fy, 'fx-ring-heal')") && combat.includes('SIPHON +'));
 check('bloatware EMP: consts + empPop + killEnemy hook', combat.includes('const BLOAT_EMP_RADIUS = 85;') && combat.includes('const BLOAT_EMP_SECONDS = 2.5;') && combat.includes('function empPop(x, y)') && combat.includes("if (enemy.key === 'bloat' && !enemy.friendly) empPop(x, y);"));
 check('EMP knocks towers offline: upkeep clock + fire-control skip', combat.includes("tower.offlineT = Math.max(0, (tower.offlineT || 0) - dt);") && combat.includes("tower.node.classList.toggle('tw-offline', tower.offlineT > 0);") && combat.includes('if (tower.offlineT > 0) continue; // Bloatware EMP'));
