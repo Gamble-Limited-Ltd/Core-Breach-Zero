@@ -14,6 +14,7 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - `src/shop/data.js`: shop data (tower catalog, categories, ULTIMATUM cards, XP curve), pure, no DOM. `src/shop/ui.js`: the Nexus Shop screen (ES module, still sets `window.CBZShop`). The economy is mirrored in `server.js`: keep them in sync.
 - Code split in progress: new code goes in ES modules under `src/` (native `import`/`export`, no bundler). `combat.js` still holds the simulation and its DOM code together. `/src/` is served with revalidation, so imports need no `?v=`.
 - `server.js`: static files (ETag, gzip, Cache-Control: `?v=` assets are immutable, html revalidates, art caches a day), account/shop/room API, WebSocket rooms.
+- `scripts/golden-run.js`: determinism harness for the combat sim (seeded RNG, fake clock, 3600 frames, compared with `scripts/golden/solo-easy.json`). Dev tool, needs Playwright (see header); run it before and after any change to sim code. Update the golden only for an intended balance change (`--update`).
 - `scripts/`: tests (`*-test.js`), `run-tests.js` (what `npm test` runs), `qa-*.sh` browser QA.
 - `terms.html`: draft Terms of Service.
 
