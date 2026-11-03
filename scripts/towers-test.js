@@ -120,7 +120,7 @@ for (const wave of HARD_WAVES) for (const [key, count] of wave.groups) {
 check('escalated HARD ladder still validates (keys + mods + counts)', badKeys.size === 0, [...badKeys].join(','));
 
 console.log('--- Shop mirrors (LOCAL + server) ---');
-const appjs = read('app.js');
+const appjs = ['src/app/update-log.js', 'app.js', 'src/app/progression.js', 'src/app/maps.js'].map(read).join('\n');
 const serverjs = read('server.js');
 const localShop = extractLiteral(appjs, 'SHOP');
 const serverShop = extractLiteral(serverjs, 'SHOP');
@@ -346,7 +346,7 @@ check('warrant FX styled (growing ring + lock pulse + layered beam)', styles.inc
 const paragon = TOWERS.find((t) => t.id === 'paragon');
 check('PARAGON: golden trophy rig, never sold, GOLDEN TITHE aura', paragon && paragon.golden === true && paragon.price === 0 && paragon.stats.tithe === 0.15 && paragon.track[4].sets.tithe === 0.2 && paragon.limit === 1);
 check('golden tithe pays out in killEnemy', combat.includes('const payout = Math.round(enemy.t.bounty * skim * paragonTithe(x, y));') && combat.includes('function paragonTithe(x, y)'));
-check('golden seal math mirrored in three places (server + app + shop)', serverjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && appjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && shopjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];"));
+check('golden seal math mirrored in two places (server + shop data); app.js imports it', serverjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && shopjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && appjs.includes("mapSeal, allSeals } from './src/shop/data.js'"));
 check('gilding bounty 2,500 NC + 10 BT on both reward paths', serverjs.includes('const GOLDEN_REWARD = { nc: 2500, bt: 10 };') && appjs.includes('const GOLDEN_REWARD = { nc: 2500, bt: 10 };'));
 check('mission-complete grants golden seals (server + LOCAL)', serverjs.includes('if (golden.length) rewards.golden = golden;') && appjs.includes('if (golden.length) rewards.golden = golden;'));
 check('paragon materializes on the fifth seal (sanitize + mission grant)', serverjs.includes("if (allSeals(meta.mapWins) && !meta.owned.includes('paragon')) meta.owned.push('paragon');") && appjs.includes("if (allSeals(meta.mapWins) && !meta.owned.includes('paragon')) meta.owned.push('paragon');") && appjs.includes("rewards.paragon = true;") && serverjs.includes("rewards.paragon = true;"));
@@ -390,8 +390,8 @@ check('old hardcoded admin code is gone from app + server', !appjs.includes('ADM
 check('ADMIN_KEY_CODE env gates the admin code on the server', serverjs.includes('process.env.ADMIN_KEY_CODE') && serverjs.includes('ADMIN_KEY_CODE.length >= 8'));
 
 console.log('--- Syntax gates ---');
-for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js']) {
-  try { require('child_process').execSync(f.startsWith('src/') ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: f.startsWith('src/') ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
+for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js']) {
+  try { require('child_process').execSync((f === 'app.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
 

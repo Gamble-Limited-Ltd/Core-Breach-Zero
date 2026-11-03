@@ -6,8 +6,8 @@ export const xpToNext = (level) => Math.round(55 * Math.pow(level, 0.86));
 
 // --- GOLDEN SEALS: a sector gilds when all four protocols fall on it -------------
 // Gild all five sectors and the PARAGON materializes in the armory.
-const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];
-const GOLDEN_MAPS = ['easy', 'medium', 'hard', 'insane', 'cbz'];
+export const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];
+export const GOLDEN_MAPS = ['easy', 'medium', 'hard', 'insane', 'cbz'];
 export const mapSeal = (mapWins, mapId) => {
   const wins = mapWins && typeof mapWins === 'object' ? mapWins : {};
   return GOLDEN_PROTOCOLS.every((p) => (wins[`${mapId}:${p}`] || 0) > 0);

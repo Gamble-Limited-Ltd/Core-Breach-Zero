@@ -87,7 +87,7 @@ const hellfireWave = hullAt(13) * 1.65;
 check('hellfire wave 14 hull ≈ 5.70x', hellfireWave > 5.5 && hellfireWave < 5.9, hellfireWave.toFixed(2));
 
 console.log('--- Deploy chain: update log, rewards, cache-bust ---');
-const appjs = read('app.js');
+const appjs = ['src/app/update-log.js', 'app.js', 'src/app/progression.js', 'src/app/maps.js'].map(read).join('\n');
 const serverjs = read('server.js');
 const indexhtml = read('index.html');
 check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
@@ -103,8 +103,8 @@ check('all 6 index.html assets cache-busted to 20261024n', busts.length === 6 &&
 check('play menu copy names the hell pass', appjs.includes('30 waves of pure hell'));
 
 console.log('--- Syntax gates ---');
-for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js']) {
-  try { require('child_process').execSync(f.startsWith('src/') ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: f.startsWith('src/') ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
+for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js']) {
+  try { require('child_process').execSync((f === 'app.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
 

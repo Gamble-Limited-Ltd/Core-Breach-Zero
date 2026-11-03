@@ -9,10 +9,10 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 
 ## File map
 - `index.html`, `styles.css`: the page and styling.
-- `app.js`: menus, accounts, rooms, offline LOCAL mode.
+- `app.js`: menus, accounts, rooms, offline LOCAL mode. It is an ES module now; data moved to `src/app/update-log.js` (BUILD + UPDATE_LOG), `src/app/progression.js` (salvage codes, achievements, perks) and `src/app/maps.js` (battle maps). Golden-seal math lives once, in `src/shop/data.js`. `combat.js` and `src/shop/ui.js` still read some `app.js` names as globals: the bridge is the `Object.assign(window, ...)` block at the end of `app.js`. Add a name there when a classic script needs it.
 - `combat.js`: the in-match game.
 - `src/shop/data.js`: shop data (tower catalog, categories, ULTIMATUM cards, XP curve), pure, no DOM. `src/shop/ui.js`: the Nexus Shop screen (ES module, still sets `window.CBZShop`). The economy is mirrored in `server.js`: keep them in sync.
-- Code split in progress: new code goes in ES modules under `src/` (native `import`/`export`, no bundler). `app.js` and `combat.js` are still single classic scripts. `/src/` is served with revalidation, so imports need no `?v=`.
+- Code split in progress: new code goes in ES modules under `src/` (native `import`/`export`, no bundler). `combat.js` is still one classic script. `/src/` is served with revalidation, so imports need no `?v=`.
 - `server.js`: static files (ETag, gzip, Cache-Control: `?v=` assets are immutable, html revalidates, art caches a day), account/shop/room API, WebSocket rooms.
 - `scripts/`: tests (`*-test.js`), `run-tests.js` (what `npm test` runs), `qa-*.sh` browser QA.
 - `terms.html`: draft Terms of Service.

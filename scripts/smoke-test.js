@@ -58,7 +58,8 @@ function wsConnect() {
   check('no root-absolute links in shell (Pages 404 guard)', !/(href|src)="\//.test(home), (home.match(/(href|src)="\/[^"]*"/g) || []).join(' '));
   const appJs = await fetch(`${BASE}/app.js`);
   check('GET /app.js served as JS', appJs.ok && appJs.headers.get('content-type').includes('javascript'));
-  check('GET /app.js has 5 map recon maps', (await appJs.text()).match(/\bid: '(easy|medium|hard|insane|cbz)'/g)?.length === 5);
+  const mapsJs = await fetch(`${BASE}/src/app/maps.js`);
+  check('GET /src/app/maps.js has 5 map recon maps', (await mapsJs.text()).match(/\bid: '(easy|medium|hard|insane|cbz)'/g)?.length === 5);
   check('GET /styles.css served', (await fetch(`${BASE}/styles.css`)).ok);
   const health = await fetch(`${BASE}/health`).then((r) => r.json());
   check('GET /health online', health.status === 'online');
