@@ -34,7 +34,7 @@ window.CBZShop = (() => {
       tagline: 'Rapid kinetic baseline — cheap, dependable, always ready.',
       stats: { dmg: 7, rate: 1.6, rng: 135, tgt: 'SINGLE / GROUND · AA ON PADS' },
       special: '>> The grid standard. Deploy on a hex pad to link anti-air coverage.',
-      art: 'assets/towers/sentinel.png',
+      art: 'assets/towers/sentinel.webp',
       track: [
         { label: 'HIGHER CALIBER', cost: 110, sets: { dmg: 12 }, info: 'DMG 7 → 12' },
         { label: 'BETTER TECH', cost: 165, sets: { rate: 2, rng: 150 }, info: 'RATE 1.6 → 2 · RNG 135 → 150' },
@@ -45,7 +45,7 @@ window.CBZShop = (() => {
       tagline: 'REWARD BLUEPRINT — beat Easy Mode to decrypt it.',
       stats: { dmg: 60, rate: 0.3, rng: 180, splash: 30, tgt: 'SPLASH 30U · AA ON PADS' },
       special: '>> Lazer shells detonate on impact for full damage inside the blast ring. Trophy chassis for clearing Easy Mode.',
-      art: 'assets/towers/lazermortar.png',
+      art: 'assets/towers/lazermortar.webp',
       track: [
         { label: 'BETTER SCOPE', cost: 400, sets: { rng: 210, rate: 0.35 }, info: 'RNG 180 → 210 · RATE 0.3 → 0.35' },
         { label: 'HIGHLY EXPLOSIVE ROUNDS', cost: 500, sets: { splash: 60, dmg: 90 }, info: 'SPLASH 30 → 60 · DMG 60 → 90' },
@@ -57,7 +57,7 @@ window.CBZShop = (() => {
       tagline: 'Close-work scattergun — wide pellet bursts shred tight packs.',
       stats: { dmg: 27, rate: 0.8, rng: 100, splash: 12, tgt: 'SPLASH 12U · GROUND · AA VIA SATELLITE' },
       special: '>> Pellet blasts hammer everything inside the burst ring. Tier-1 Satellite Comms unlocks anti-air without a hex pad.',
-      art: 'assets/towers/shotgunner.png',
+      art: 'assets/towers/shotgunner.webp',
       track: [
         { label: 'SATELLITE COMMS', cost: 95, sets: { rng: 105, air: 'yes' }, info: 'RNG 100 → 105 · ANTI-AIR UNLOCKED — no pad needed' },
         { label: 'LARGER SHELLS', cost: 190, sets: { splash: 20 }, info: 'SPLASH 12 → 20' },
@@ -69,7 +69,7 @@ window.CBZShop = (() => {
       tagline: 'Jury-rigged zapper — a wound coil that snaps cheap sparks down the lane.',
       stats: { dmg: 9, rate: 1.2, rng: 100, tgt: 'SINGLE / GROUND · AA ON PADS' },
       special: '>> Grid-jury hardware: hits singles only, never splashes, and the ladder runs out of ambition after three small tiers. It clears the opening drip and then holds a hex like furniture. Filler, honestly — priced like it too. Deploy on a hex pad to link anti-air coverage.',
-      art: 'assets/towers/sparkcoil.png',
+      art: 'assets/towers/sparkcoil.webp',
       track: [
         { label: 'TIGHTER WINDING', cost: 110, sets: { rate: 1.4 }, info: 'RATE 1.2 → 1.4' },
         { label: 'LONGER ARC', cost: 190, sets: { rng: 115, dmg: 12 }, info: 'RNG 100 → 115 · DMG 9 → 12' },
@@ -80,7 +80,7 @@ window.CBZShop = (() => {
       tagline: 'Long-reach marksman — one trigger pull, one deletion.',
       stats: { dmg: 130, rate: 0.3, rng: 250, tgt: 'SINGLE / GROUND · AA ON PADS' },
       special: '>> Pinpoint rounds erase the priority threat. Tier-1 Sniper Headset locks every shot onto the highest-HP hostile in reach.',
-      art: 'assets/towers/sniper.png',
+      art: 'assets/towers/sniper.webp',
       track: [
         { label: 'SNIPER HEADSET', cost: 150, sets: { rng: 270, targeting: 'maxhp' }, info: 'RNG 250 → 270 · ONLY TARGETS THE HIGHEST-HP ENEMY IN RANGE' },
         { label: 'HIGHER CAL', cost: 200, sets: { dmg: 150 }, info: 'DMG 130 → 150' },
@@ -93,7 +93,7 @@ window.CBZShop = (() => {
       tagline: 'Sky-warden pair — twin flak barrels that shred drone waves and nothing else.',
       stats: { dmg: 16, rate: 1.5, rng: 150, tgt: 'SINGLES / FLYERS ONLY · GROUND IS BENEATH IT' },
       special: '>> One job: the sky. The twin barrels track and shred flying hostiles without any pad link — and completely ignore everything that walks. Ground waves stroll past it like it is a lawn ornament. Filler with a specialty.',
-      art: 'assets/towers/flakpost.png',
+      art: 'assets/towers/flakpost.webp',
       track: [
         { label: 'SPANNER BARRELS', cost: 150, sets: { rate: 1.8 }, info: 'RATE 1.5 → 1.8' },
         { label: 'FRAG ROUNDS', cost: 280, sets: { dmg: 22, splash: 8 }, info: 'DMG 16 → 22 · FLAK BURST RING 8U' },
@@ -104,7 +104,7 @@ window.CBZShop = (() => {
       tagline: 'Chaff mulcher — a spinning drum of cheap blades that deletes the early waves and nothing else.',
       stats: { dmg: 11, rate: 3, rng: 105, tgt: 'SINGLE / GROUND · AA ON PADS' },
       special: '>> The early-wave answer: per salvage, nothing on the grid clears runners, files and glitched faster. It never scales — the ladder tops out quick on purpose, so past the opening waves it is salvage bait. Deploy on a hex pad to link anti-air coverage.',
-      art: 'assets/towers/shredder.png',
+      art: 'assets/towers/shredder.webp',
       track: [
         { label: 'WIDER INTAKE', cost: 120, sets: { rate: 3.5 }, info: 'RATE 3 → 3.5' },
         { label: 'CARBIDE TEETH', cost: 240, sets: { dmg: 15 }, info: 'DMG 11 → 15' },
@@ -115,7 +115,7 @@ window.CBZShop = (() => {
       tagline: 'Field hazard — no gun at all, just a slick of cold tar across the lane.',
       stats: { dmg: 0, rate: 0, rng: 85, slow: 0.15, tgt: 'FIELD HAZARD · NO DAMAGE · WALKERS ONLY' },
       special: '>> It pumps tar. Everything that walks through the slick drags at 15% less speed while inside — flyers skim right over it, and nothing ever dies to it. Cheap traffic control that never kills anything: pure filler with a purpose.',
-      art: 'assets/towers/tarsprayer.png',
+      art: 'assets/towers/tarsprayer.webp',
       track: [
         { label: 'HEAVIER BLEND', cost: 210, sets: { slow: 0.2 }, info: 'SLOW 15% → 20%' },
         { label: 'WIDE NOZZLE', cost: 430, sets: { rng: 105, slow: 0.25 }, info: 'RNG 85 → 105 · SLOW 20% → 25%' },
@@ -125,7 +125,7 @@ window.CBZShop = (() => {
       tagline: 'Automated carrier — fabricates one-way strike drones straight into traffic.',
       stats: { dmg: 0, rate: 0, rng: 190, drone: 90, launchEvery: 5, tgt: 'SPAWNER // LAUNCHES STRIKE DRONES · ONE PER COMMANDER' },
       special: '>> While hostiles stand inside its ring, the carrier rolls a strike drone off the line every few seconds. The drone rockets across the grid and detonates on the first hostile it intercepts — walkers and flyers alike — for its full payload. The FIELD AUDIT put the line back on a war footing: 90-payload warbirds every 5 seconds stock, and the APEX CARRIER fields 300-payload monsters every 2.6 seconds. Only one carrier deploys per commander.',
-      art: 'assets/towers/dronespawner.png',
+      art: 'assets/towers/dronespawner.webp',
       track: [
         { label: 'HUNGER DRONES', cost: 240, sets: { launchEvery: 4 }, info: 'LAUNCH CADENCE 5s → 4s' },
         { label: 'WARBIRD CHASSIS', cost: 420, sets: { drone: 150 }, info: 'DRONE DMG/HULL 90 → 150' },
@@ -137,7 +137,7 @@ window.CBZShop = (() => {
       tagline: 'Strategic strike chassis — silo-launched warheads level whole formations.',
       stats: { dmg: 300, rate: 0.22, rng: 300, splash: 55, tgt: 'SPLASH 55U · AIR + GROUND · NO PAD NEEDED' },
       special: '>> The endgame answer. Warheads arc out to anywhere in a huge ring and detonate for full damage inside the blast — air or ground, no hex pad required. MIRV PROTOCOL cracks every shell into cluster bomblets that pepper the whole crater.',
-      art: 'assets/towers/missilesilo.png',
+      art: 'assets/towers/missilesilo.webp',
       track: [
         { label: 'WARHEAD CACHE', cost: 520, sets: { dmg: 420 }, info: 'DMG 300 → 420' },
         { label: 'CLUSTER PAYLOAD', cost: 780, sets: { splash: 75 }, info: 'SPLASH 55 → 75' },
@@ -149,7 +149,7 @@ window.CBZShop = (() => {
       tagline: 'Tri-weapon hero — one chassis, three switchable guns, and the longest ladder the Nexus has ever minted.',
       stats: { dmg: 60, rate: 1.2, rng: 170, tgt: 'TRI-WEAPON // 3 SWITCHABLE GUNS · AA ON PADS · ONE PER COMMANDER' },
       special: '>> The old soldier carries three guns and knows when each one sings. The BATTLE RIFLE heats up +20% per consecutive hit on the same hull (max +60%), the SCATTERGUN empties a 32u blast ring through air and ground alike, and the LONGRIFLE pierces armor plating to lock the beefiest hull in reach — commanders pay a 1.4x surcharge. Switch guns free and instantly from the tower panel. Eight ladder tiers — the most upgrades ever bolted onto one chassis, and every tier benefits all three guns.',
-      art: 'assets/towers/veteran.png',
+      art: 'assets/towers/veteran.webp',
       track: [
         { label: 'FIELD SIGHTS', cost: 200, sets: { rng: 190 }, info: 'RNG 170 → 190' },
         { label: 'CHROME BARREL', cost: 420, sets: { dmg: 80 }, info: 'DMG 60 → 80' },
@@ -165,7 +165,7 @@ window.CBZShop = (() => {
       tagline: 'Passive breach engine — no guns, just money printed every wave.',
       stats: { dmg: 0, rate: 0, rng: 0, income: 120, tgt: 'ECONOMY RIG // PAYS EVERY WAVE · ONE PER COMMANDER' },
       special: '>> Prints salvage at the end of every cleared wave. Tier-5 skims +10% off every enemy bounty. Tier-6 arms the Nuclear Fall Out strike — an aimed tactical nuke with radioactive aftermath. Only one rig deploys per commander.',
-      art: 'assets/towers/zeroday.png',
+      art: 'assets/towers/zeroday.webp',
       track: [
         { label: 'BETTER RIG', cost: 140, sets: { income: 170 }, info: 'INCOME 120 → 170/WAVE' },
         { label: 'MORE FABRICATION', cost: 320, sets: { income: 370 }, info: 'INCOME 170 → 370/WAVE' },
@@ -179,7 +179,7 @@ window.CBZShop = (() => {
       tagline: 'Compound war chest — deposit salvage, watch it grow every cleared wave, withdraw whenever.',
       stats: { dmg: 0, rate: 0, rng: 0, bond: 0.12, bondCap: 3000, tgt: 'ECONOMY // WAR BONDS · DEPOSIT + COMPOUND INTEREST · ONE PER COMMANDER' },
       special: '>> The ZERO DAY rig prints flat salvage every wave — WAR BONDS makes your money WORK instead. Deposit $500 into the bond from the tower panel; every cleared wave pays compound interest straight into the bond (12% base), and WITHDRAW moves the whole war chest back to your wallet whenever you need it. The longer the run, the harder the bond works — GOLD STANDARD compounds 22% against a $12,000 cap. Only one war chest deploys per commander.',
-      art: 'assets/towers/warbonds.png',
+      art: 'assets/towers/warbonds.webp',
       track: [
         { label: 'GREEN STAMPS', cost: 250, sets: { bond: 0.15 }, info: 'WAVE INTEREST 12% → 15%' },
         { label: 'WIDE LEDGER', cost: 450, sets: { bondCap: 5000 }, info: 'BOND CAP $3,000 → $5,000' },
@@ -192,7 +192,7 @@ window.CBZShop = (() => {
       tagline: 'Network pylon — no guns, it just makes every gun inside its ring better.',
       stats: { dmg: 0, rate: 0, rng: 170, dmgBuff: 0.1, tgt: 'AURA // BUFFS EVERY TOWER IN THE RING · ONE PER COMMANDER' },
       special: '>> The first true support rig. Every tower inside the relay ring hits harder — and the ladder rewires the whole network: a wider ring, more damage, longer reach (TARGET UPLINK), faster clocks (MORALE CORE) and RALLY CRY, a salvage cast that floods the ring with overdrive fire rate. Only one relay deploys per commander.',
-      art: 'assets/towers/relay.png',
+      art: 'assets/towers/relay.webp',
       track: [
         { label: 'WIDE NET', cost: 320, sets: { rng: 200 }, info: 'RELAY RING 170 → 200' },
         { label: 'POWER GRID', cost: 640, sets: { dmgBuff: 0.12 }, info: 'RING DAMAGE BUFF +10% → +12%' },
@@ -205,7 +205,7 @@ window.CBZShop = (() => {
       tagline: 'Fragment beat — no gun of its own, but every gun in the ring suddenly splashes.',
       stats: { dmg: 0, rate: 0, rng: 150, frag: 0.1, fragRadius: 35, tgt: 'SUPPORT AURA // FRAG ROUNDS — NEARBY GUNS SPLASH · ONE PER COMMANDER' },
       special: '>> The drum beats and the whole network throws shrapnel: every tower inside the ring splashes 10% of its damage around whatever hull it just hit (35u frag ring). The ladder deepens the beat — wider ring, fatter frag, a 55u cluster ring — and WAR CHOIR teaches the drum to lob its own 140-damage frag shell every 4 seconds. Splash guns have nothing to gain; single-target guns become artillery. Only one drumline deploys per commander.',
-      art: 'assets/towers/wardrums.png',
+      art: 'assets/towers/wardrums.webp',
       track: [
         { label: 'DEEPER SKINS', cost: 380, sets: { frag: 0.14 }, info: 'FRAG SPLASH 10% → 14% OF GUN DMG' },
         { label: 'WIDER BEAT', cost: 700, sets: { rng: 190 }, info: 'DRUM RING 150 → 190' },
@@ -216,7 +216,7 @@ window.CBZShop = (() => {
       icon: ic('<circle cx="20" cy="18" r="9"/><ellipse cx="20" cy="18" rx="9" ry="3"/><path d="M11 18v8M29 18v8M20 27v4M13 31h14"/><path d="M8 10l4 4M32 10l-4 4"/>') },
     { id: 'dawnbreaker', name: 'DAWNBRINGER', cat: 'special', unlock: 1, price: { nc: 250000, bt: 2500 }, cost: 1600, currency: 'mixed', event: true, limit: 1,
       tagline: 'CRIMSON RELIC — a dawn-forged solar lance that treats armor as a rumor.',
-      stats: { dmg: 330, rate: 0.8, rng: 320, tgt: 'SINGLE / AIR + GROUND · IGNORES ARMOR · ONE PER COMMANDER' }, art: 'assets/towers/dawnbreaker.png',
+      stats: { dmg: 330, rate: 0.8, rng: 320, tgt: 'SINGLE / AIR + GROUND · IGNORES ARMOR · ONE PER COMMANDER' }, art: 'assets/towers/dawnbreaker.webp',
       special: '>> Forged in the only Crimson Dawn the grid will ever see. Every beam burns straight through armor plating at full damage, tracks air and ground without a hex pad, and the ladder ends in SUNSLAUGHTER: 1250-damage rounds with a burning 40-unit splash. The most expensive hardware the Nexus has ever inventoried — 250,000 NC + 2,500 BT declared value, 1,600 salvage to deploy and a doubled forge ladder — because a relic this insane should cost like it. It will never be sold, crafted or given again — survive the dawn or never hold it.',
       track: [
         { label: 'FIRST LIGHT', cost: 1600, sets: { dmg: 500, rate: 0.9 }, info: 'DMG 330 → 500 · RATE 0.8 → 0.9' },
@@ -229,7 +229,7 @@ window.CBZShop = (() => {
       tagline: 'GOLDEN STANDARD — the trophy rig. Materializes only when every sector on the grid wears its Golden Seal.',
       stats: { dmg: 90, rate: 1, rng: 200, tithe: 0.15, tgt: 'GOLDEN STANDARD // AIR + GROUND · +15% BOUNTY IN RING · ONE PER COMMANDER' },
       special: '>> The reward for a perfect campaign: beat EASY, MEDIUM, HARD and INSANE on all five battle sectors to gild them, and the PARAGON materializes in your armory — free, singular, permanent. Its gilded barrel tracks air and ground without a pad, and the GOLDEN TITHE taxes every hostile killed inside its ring for +15% bounty (20% at the crown). It is never sold, only earned.',
-      art: 'assets/towers/paragon.png',
+      art: 'assets/towers/paragon.webp',
       track: [
         { label: 'GILDED BARREL', cost: 300, sets: { dmg: 120 }, info: 'DMG 90 → 120' },
         { label: 'AUREATE SCOPE', cost: 600, sets: { rng: 230 }, info: 'RNG 200 → 230' },
@@ -242,7 +242,7 @@ window.CBZShop = (() => {
       tagline: 'ULTIMATUM CARD — the apex verdict. One shot. Every ten seconds. The biggest thing on the field simply stops existing.',
       stats: { dmg: 1500, rate: 0, rng: 460, warrantPct: 0.25, warrantCd: 12, tgt: 'ANNIHILATOR // ONE VERDICT EVERY 12s · HIGHEST-HULL LOCK · ONE PER COMMANDER' },
       special: '>> The DEATHWARRANT does not fight a battle — it executes a sentence. It locks the beefiest hostile in reach (air or ground, a 460u verdict ring), charges for twelve seconds under a growing ring and a lock reticle, then fires: 1,500 flat damage PLUS 25% of everything the target carries — the fatter the hull, the harder the hit — straight through armor and shields as phase damage. If the sentenced hull dies, DEATH ECHO detonates the corpse for 20% of its max hull across 90u. It fires nothing else. It never has to.',
-      art: 'assets/towers/deathwarrant.png',
+      art: 'assets/towers/deathwarrant.webp',
       track: [
         { label: 'BLACK SITE OPTICS', cost: 800, sets: { rng: 520 }, info: 'VERDICT RING 460 → 520' },
         { label: 'HEAVY PAYLOAD', cost: 1800, sets: { dmg: 2200 }, info: 'FLAT PAYLOAD 1,500 → 2,200' },
@@ -255,7 +255,7 @@ window.CBZShop = (() => {
       tagline: 'ULTIMATUM CARD — the grave warden. Anything that dies near it rises and walks the lane backwards.',
       stats: { dmg: 0, rate: 0, rng: 180, summon: 30, tgt: 'SPAWNER // NO ATTACK · ONE PER COMMANDER' },
       special: '>> The apex tier of the Nexus. When anything dies inside its ring, a weakened copy rises at its TRUE scaled hull and marches back down the track — mowing through up to four hostiles instead of dying on the first bump: every hostile it touches takes damage equal to the risen\u2019s full hull, and each mow costs the risen a quarter of that hull. Its own kills feed the Blood Lust bar — purge it for a burst of stored pain. Obtained only in the ULTIMATUM vault: two cores, one card armed at a time.',
-      art: 'assets/towers/corpseblossom.png',
+      art: 'assets/towers/corpseblossom.webp',
       track: [
         { label: 'LARGER BRANCHES', cost: 140, sets: { rng: 200 }, info: 'RNG 180 → 200' },
         { label: 'BLOOD VEINS', cost: 550, sets: { veins: 60 }, info: 'AOE PULSE: 60 DMG · RANDOM RATE 0.1-1/s · VEIN KILLS RISE BLOOD STAINED (+50 HP SUMMONS)' },
@@ -268,7 +268,7 @@ window.CBZShop = (() => {
       tagline: 'ULTIMATUM CARD — the second apex rig. A walled yard where the dead pay toll, the bell never rests, and the core gives up its souls.',
       stats: { dmg: 0, rate: 0, rng: 180, tgt: 'AURA // YARD CONTROL · ONE PER COMMANDER' },
       special: '>> The Warden keeps a walled yard: everything hostile inside drags its heels once the CHILL GRAVE is laid, and every death inside the yard rings the bell sooner. When the DEATH TOLL sounds, the whole yard takes the pulse and chaff is stunned where it stands. Tier 6 raises the SOUL CHOIR: the Warden pulls vengeful souls out of the core itself — hulls forged from the yard\u2019s toll — and the choir does not sing for free. Commanders are beneath its notice. Repriced to ONE core and weighted to match: the bell rings a touch softer, the yard drags a touch less, and the hymns cost $850 on a 40s rest. Obtained only in the ULTIMATUM vault: one card armed at a time.',
-      art: 'assets/towers/gravewarden.png',
+      art: 'assets/towers/gravewarden.webp',
       track: [
         { label: 'WIDER YARD', cost: 200, sets: { rng: 200 }, info: 'RNG 180 → 200' },
         { label: 'DEATH TOLL', cost: 600, sets: { bell: 100 }, info: 'BELL PULSE: 100 DMG EVERY 8s · 0.8s STUN · YARD KILLS RING IT SOONER' },
@@ -282,7 +282,7 @@ window.CBZShop = (() => {
       tagline: 'The headsman\u2019s rail. Decrypts at Clearance 50 — it only has one job.',
       stats: { dmg: 72, rate: 0.45, rng: 240, execute: 0.12, tgt: 'MAX-HULL // AIR + GROUND · UP TO 3 PER COMMANDER', targeting: 'maxhp' },
       special: '>> The rail never wastes a round on the small stuff — chaff soaks a token 15% of the shot, while commanders (mini-bosses and bosses) pay full price. Its true work is the sentence: mark a commander below the execute threshold and the next round takes its head clean off. Only the final boss is beyond the blade. The priciest chassis in the standard rotation — and the only one that hunts commanders. Up to three rails per commander.',
-      art: 'assets/towers/executioner.png',
+      art: 'assets/towers/executioner.webp',
       track: [
         { label: 'WIDENED SLOTS', cost: 250, sets: { rng: 260 }, info: 'RNG 240 → 260' },
         { label: 'HARDENED ROUNDS', cost: 650, sets: { dmg: 140 }, info: 'DMG 72 → 140' },
@@ -295,7 +295,7 @@ window.CBZShop = (() => {
       tagline: 'Melee swarm chassis — blades that feast at contact range and infect what they touch.',
       stats: { dmg: 12, rate: 3, rng: 90, tgt: 'MELEE / GROUND + AIR' },
       special: '>> Shreds anything that steps into blade range — walkers and flyers alike. The CONTAGION ladder teaches the strain to infect: corrupted hostiles burn for its full tick every second, straight through armor plating and shield lattices. Expensive to field and to upgrade — but nothing mid-lane melts tanks like a maxed strain.',
-      art: 'assets/towers/virus.png',
+      art: 'assets/towers/virus.webp',
       track: [
         { label: 'LARGER BLADES', cost: 650, sets: { dmg: 20, rng: 100 }, info: 'DMG 12 → 20 · RNG 90 → 100' },
         { label: 'SUPER VIRUS', cost: 900, sets: { dmg: 30, rate: 3.2, rng: 105 }, info: 'DMG 20 → 30 · RATE 3 → 3.2 · RNG 100 → 105' },
