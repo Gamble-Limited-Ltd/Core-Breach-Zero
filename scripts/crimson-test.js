@@ -88,8 +88,8 @@ check('LOCAL grants relic on crimson win', grantRe.test(appjs));
 check('relic flag returned in both payloads', (serverjs.match(/relic, levelsGained/g) || []).length === 1 && (appjs.match(/relic, levelsGained/g) || []).length === 1);
 check('dawnbreaker NOT in LOCAL shop mirror (unpurchasable)', !/dawnbreaker: \{ name: 'DAWNBRINGER'/.test(appjs));
 
-console.log('--- Shop relic card (shop.js) ---');
-const shopjs = read('shop.js');
+console.log('--- Shop relic card (src/shop/data.js) ---');
+const shopjs = read('src/shop/data.js') + read('src/shop/ui.js');
 check('DAWNBRINGER blueprint registered as event relic', shopjs.includes("id: 'dawnbreaker'") && shopjs.includes('event: true'));
 check('event-locked visibility gate (never buyable)', shopjs.includes("if (entry.event) return 'event-locked';"));
 check('event-locked card renders SLAY THE CRIMSON DAWN lock', shopjs.includes('SLAY THE CRIMSON DAWN'));
@@ -152,8 +152,8 @@ check('UPDATE LOG leads with FLIGHT CORRIDOR entry', appjs.indexOf("version: '20
 check('update log covers drone nerf + corridor pads + intel readout', ['1 core damage per leak', 'Two AA pads laid directly under the drone approach lines', 'protocol-adjusted CORE DMG'].every((s) => appjs.includes(s)));
 
 console.log('--- Syntax gates ---');
-for (const f of ['app.js', 'combat.js', 'server.js', 'shop.js']) {
-  try { require('child_process').execSync(`node --check ${path.join(ROOT, f)}`, { stdio: 'pipe' }); check(`${f} parses clean`, true); }
+for (const f of ['app.js', 'combat.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js']) {
+  try { require('child_process').execSync(f.startsWith('src/') ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: f.startsWith('src/') ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
 

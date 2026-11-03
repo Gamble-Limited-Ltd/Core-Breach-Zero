@@ -11,7 +11,8 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - `index.html`, `styles.css`: the page and styling.
 - `app.js`: menus, accounts, rooms, offline LOCAL mode.
 - `combat.js`: the in-match game.
-- `shop.js`: the Nexus Shop UI (economy is mirrored in `server.js`: keep them in sync).
+- `src/shop/data.js`: shop data (tower catalog, categories, ULTIMATUM cards, XP curve), pure, no DOM. `src/shop/ui.js`: the Nexus Shop screen (ES module, still sets `window.CBZShop`). The economy is mirrored in `server.js`: keep them in sync.
+- Code split in progress: new code goes in ES modules under `src/` (native `import`/`export`, no bundler). `app.js` and `combat.js` are still single classic scripts. `/src/` is served with revalidation, so imports need no `?v=`.
 - `server.js`: static files (ETag, gzip, Cache-Control: `?v=` assets are immutable, html revalidates, art caches a day), account/shop/room API, WebSocket rooms.
 - `scripts/`: tests (`*-test.js`), `run-tests.js` (what `npm test` runs), `qa-*.sh` browser QA.
 - `terms.html`: draft Terms of Service.
@@ -29,7 +30,7 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - Keep the glowing home-screen menus and their look.
 - Keep `README.md`, `AGENTS.md` and `CLAUDE.md` current in the same commit as the change.
 - Tower art is 512px WebP in `assets/towers/`; keep new art at that size and format.
-- Bump the `?v=` cache-bust string in `index.html` when you change `app.js`, `combat.js`, `shop.js` or `styles.css`.
+- Bump the `?v=` cache-bust string in `index.html` when you change `app.js`, `combat.js`, `src/shop/ui.js` or `styles.css`.
 
 ## Working together
 - GLL may open issues and PRs on GitHub. The author replies there.

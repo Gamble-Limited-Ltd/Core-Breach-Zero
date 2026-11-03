@@ -103,8 +103,8 @@ check('all 6 index.html assets cache-busted to 20261024n', busts.length === 6 &&
 check('play menu copy names the hell pass', appjs.includes('30 waves of pure hell'));
 
 console.log('--- Syntax gates ---');
-for (const f of ['combat.js', 'app.js', 'server.js', 'shop.js']) {
-  try { require('child_process').execSync(`node --check ${path.join(ROOT, f)}`, { stdio: 'pipe' }); check(`${f} parses clean`, true); }
+for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js']) {
+  try { require('child_process').execSync(f.startsWith('src/') ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: f.startsWith('src/') ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
 

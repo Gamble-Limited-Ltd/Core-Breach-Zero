@@ -36,7 +36,7 @@ function loadAccounts() {
 
 const accounts = loadAccounts();
 
-// --- Nexus economy (mirrored in shop.js — keep in sync) -----------------------
+// --- Nexus economy (mirrored in src/shop/data.js — keep in sync) -----------------------
 // Clearance is UNCAPPED since the ULTIMATUM era — levels climb forever.
 const xpToNext = (level) => Math.round(55 * Math.pow(level, 0.86));
 const SHOP = {
@@ -72,7 +72,7 @@ const ULT_TOWERS = new Set(['corpseblossom', 'gravewarden', 'deathwarrant']);
 
 // --- GOLDEN SEALS: a sector gilds when all four protocols fall on it --------------
 // Gild every sector and the PARAGON materializes in the armory. Mirrored in
-// app.js (LOCAL + client) and shop.js — keep the derivation in sync.
+// app.js (LOCAL + client) and src/shop/ — keep the derivation in sync.
 const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];
 const GOLDEN_MAPS = ['easy', 'medium', 'hard', 'insane', 'cbz'];
 const GOLDEN_REWARD = { nc: 2500, bt: 10 }; // one-time payout the first time a sector gilds
@@ -528,8 +528,8 @@ const server = http.createServer((request, response) => {
     }
     const ext = path.extname(filePath);
     const etag = `"${crypto.createHash('sha1').update(content).digest('base64url')}"`;
-    // ?v= assets never change under that URL; html always revalidates; other assets (art) for a day.
-    const cache = ext === '.html' ? 'no-cache' : reqUrl.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=86400';
+    // ?v= assets never change under that URL; html and /src/ modules (imported without ?v=) always revalidate; other assets (art) for a day.
+    const cache = ext === '.html' || requestedPath.startsWith('/src/') ? 'no-cache' : reqUrl.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=86400';
     const headers = {
       'content-type': mimeTypes[ext] || 'application/octet-stream',
       'x-content-type-options': 'nosniff',
