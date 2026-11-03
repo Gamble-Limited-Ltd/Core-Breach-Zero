@@ -64,8 +64,10 @@ const EVERY = 300;
   for (let f = 0; f < FRAMES; f += EVERY) {
     await page.evaluate((n) => window.__step(n), EVERY);
     const st = await page.evaluate(() => { const s = CBZCombat.stats(); delete s.towersDetail; return s; });
-    // View check (not part of the golden): every live enemy has exactly one SVG group.
+    // View check (not part of the golden): every live enemy and tower has exactly one SVG group.
     const nodes = await page.evaluate(() => document.querySelectorAll('g.enemy:not(.dying)').length);
+    const towerNodes = await page.evaluate(() => document.querySelectorAll('g.tower').length);
+    if (towerNodes !== st.towers) { console.log(`VIEW MISMATCH at frame ${f + EVERY}: ${towerNodes} tower nodes, ${st.towers} towers`); process.exit(1); }
     if (nodes !== st.enemies) { console.log(`VIEW MISMATCH at frame ${f + EVERY}: ${nodes} nodes, ${st.enemies} enemies`); process.exit(1); }
     out.push({ frame: f + EVERY, ...st });
   }

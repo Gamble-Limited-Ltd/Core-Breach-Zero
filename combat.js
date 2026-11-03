@@ -59,7 +59,7 @@ const state = {
   map: null, samplers: [], gateEvents: [], zoneRanges: [],
   waveIndex: -1, queue: [], spawnGap: 0, intermission: 0, countdown: 0,
   cash: 0, baseHp: BASE_MAX, enemies: [], kills: 0, bossesKilled: 0, earned: 0, clock: 0, nidSeq: 0,
-  towers: [], projectiles: [], pidSeq: 0,
+  towers: [], projectiles: [], pidSeq: 0, tidSeq: 0,
   bonusNc: 0,
   corpseLust: 0, // reserved telemetry: total Blood Lust banked across Blossoms
 };
@@ -319,6 +319,70 @@ function renderEnemies() {
       enemyViews.delete(nid);
     }
   }
+}
+
+// --- Tower view -------------------------------------------------------------------------
+// Towers are plain data (x, y, lvl, offlineT, charge, aim...). The SVG group, head rotation, status
+// classes and the Deathwarrant's lock graphics live here, keyed by tower uid. Co-op guest towers
+// (tower.guest) still carry their own node.
+const towerViews = new Map();
+
+function makeTowerView(tower) {
+  const node = towerNode(tower.entry, tower.x, tower.y);
+  node.dataset.uid = tower.uid;
+  ui.layers.towers.appendChild(node);
+  const v = { node, head: node.querySelector('.tw-head'), tower, warrant: null };
+  towerViews.set(tower.uid, v);
+  return v;
+}
+
+function towerNodeOf(tower) {
+  if (tower.guest) return tower.node;
+  const v = towerViews.get(tower.uid);
+  return v ? v.node : null;
+}
+
+function dropTowerView(tower) {
+  const v = towerViews.get(tower.uid);
+  if (!v) return;
+  v.node.remove();
+  if (v.warrant) for (const el of Object.values(v.warrant)) el.remove();
+  towerViews.delete(tower.uid);
+}
+
+function renderTowers() {
+  if (!ui.layers) return;
+  const seen = new Set();
+  for (const tower of state.towers) {
+    if (tower.guest) continue;
+    seen.add(tower.uid);
+    const v = towerViews.get(tower.uid) || makeTowerView(tower);
+    v.node.classList.toggle('tw-offline', (tower.offlineT || 0) > 0);
+    v.node.classList.toggle('tw-charging', Boolean(tower.charge));
+    if (v.head && tower.aim !== undefined && tower.aim !== v.aim) { v.aim = tower.aim; v.head.setAttribute('transform', `rotate(${tower.aim.toFixed(1)})`); }
+    const charge = tower.charge;
+    if (charge && !v.warrant) {
+      const ring = svgNode('circle', { class: 'fx-warrant-ring', cx: tower.x, cy: tower.y, r: 6 });
+      const lock = svgNode('g', { class: 'fx-warrant-lock' });
+      lock.appendChild(svgNode('path', { d: 'M0 -14 L14 0 L0 14 L-14 0 Z' }));
+      const line = svgNode('line', { class: 'fx-warrant-line', x1: tower.x, y1: tower.y, x2: charge.x.toFixed(1), y2: charge.y.toFixed(1) });
+      ui.layers.fx.appendChild(line);
+      ui.layers.fx.appendChild(ring);
+      ui.layers.fx.appendChild(lock);
+      v.warrant = { ring, lock, line };
+    }
+    if (charge && v.warrant) {
+      const { ring, lock, line } = v.warrant;
+      lock.setAttribute('transform', `translate(${charge.x.toFixed(1)} ${charge.y.toFixed(1)})`);
+      line.setAttribute('x2', charge.x.toFixed(1));
+      line.setAttribute('y2', charge.y.toFixed(1));
+      ring.setAttribute('r', (6 + 30 * (1 - Math.max(0, charge.t) / charge.total)).toFixed(1));
+    } else if (v.warrant) {
+      for (const el of Object.values(v.warrant)) el.remove();
+      v.warrant = null;
+    }
+  }
+  for (const [uid, v] of towerViews) if (!seen.has(uid)) dropTowerView(v.tower); // sold or mission reset
 }
 
 // --- Spawning / damage / death -------------------------------------------------------
@@ -709,6 +773,7 @@ function tick(ts) {
   updateProjectiles(dt);
   renderProjectiles();
   renderEnemies();
+  renderTowers();
   if (coopHost()) {
     state.syncT -= dt;
     if (state.syncT <= 0) { state.syncT = 0.12; coopBroadcast(); }
@@ -1620,9 +1685,8 @@ function placeTower(entry, x, y) {
   }
   if (state.cash < entry.cost) { emit('sound', 'alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return false; }
   state.cash -= entry.cost;
-  const node = towerNode(entry, x, y);
-  ui.layers.towers.appendChild(node);
-  const tower = { id: entry.id, entry, x, y, node, head: node.querySelector('.tw-head'), cd: 0.35, boost: 1, lvl: 0 };
+  const tower = { uid: ++state.tidSeq, id: entry.id, entry, x, y, cd: 0.35, boost: 1, lvl: 0 };
+  const node = makeTowerView(tower).node;
   if (entry.id === 'corpseblossom') { tower.veinCd = 0.6; tower.lust = 0; tower.screamCd = 0; }
   if (entry.id === 'gravewarden') { tower.bellCd = 2.5; tower.tollCharges = 0; tower.soulCd = 0; }
   if (entry.id === 'zeroday') tower.nukeCd = 0;
@@ -1861,9 +1925,11 @@ function trackInvested(tower) {
 function paintTowerRange(tower) {
   const es = effStats(tower);
   const r = es.infinite ? 300 : Math.round(es.rng * relayMult(tower, 'range'));
-  const range = tower.node.querySelector('.tw-range');
+  const node = towerNodeOf(tower);
+  if (!node) return;
+  const range = node.querySelector('.tw-range');
   if (range) range.setAttribute('r', r);
-  const aura = tower.node.querySelector('.tw-aura');
+  const aura = node.querySelector('.tw-aura');
   if (aura) aura.setAttribute('r', r);
 }
 
@@ -2117,7 +2183,7 @@ function openTowerPanel(tower) {
   panel.style.top = `${Math.max(margin, Math.min(window.innerHeight - ph - margin, sy - 120))}px`;
   ui.towerPanel = panel;
   ui.panelTower = tower;
-  tower.node.classList.add('selected');
+  towerNodeOf(tower).classList.add('selected');
   panel.querySelectorAll('.tp-buy').forEach((button) => button.addEventListener('click', () => buyTrack(tower)));
   panel.querySelector('.tp-sell').addEventListener('click', () => sellTower(tower));
   const purge = panel.querySelector('#tp-purge');
@@ -2138,7 +2204,7 @@ function openTowerPanel(tower) {
 }
 
 function closeTowerPanel() {
-  if (ui.panelTower && ui.panelTower.node) ui.panelTower.node.classList.remove('selected');
+  if (ui.panelTower) { const node = towerNodeOf(ui.panelTower); if (node) node.classList.remove('selected'); }
   if (ui.towerPanel) { ui.towerPanel.remove(); ui.towerPanel = null; }
   ui.panelTower = null;
 }
@@ -2147,7 +2213,7 @@ function sellTower(tower) {
   if (coopGuest()) { coopIntent({ a: 'sell', t: state.towers.indexOf(tower) }); closeTowerPanel(); return; }
   const refund = Math.floor(trackInvested(tower) * 0.7);
   state.cash += refund;
-  tower.node.remove();
+  dropTowerView(tower);
   if (tower.pad) {
     const padNode = document.querySelector(`[data-pad="${tower.pad[0]},${tower.pad[1]}"]`);
     if (padNode) padNode.classList.remove('occupied');
@@ -2163,7 +2229,7 @@ function sellTower(tower) {
 
 // --- Tower combat brain ------------------------------------------------------------------
 function updateTowers(dt) {
-  if (!ui.layers || !state.towers.length) { paintNukeButton(); return; }
+  if (!state.towers.length) { paintNukeButton(); return; }
   // Rally clock: RALLY CRY keeps the ring's fire rate flooded for its duration.
   for (const tower of state.towers) {
     tower.rallyT = Math.max(0, (tower.rallyT || 0) - dt);
@@ -2173,7 +2239,6 @@ function updateTowers(dt) {
   // Bloat EMP clock: offline towers drag back online as the timer drains.
   for (const tower of state.towers) {
     tower.offlineT = Math.max(0, (tower.offlineT || 0) - dt);
-    tower.node.classList.toggle('tw-offline', tower.offlineT > 0);
   }
   for (const tower of state.towers) {
     if (tower.id === 'corpseblossom') {
@@ -2266,23 +2331,12 @@ function updateTowers(dt) {
       const es = effStats(tower);
       if (tower.charge) {
         const target = state.enemies.find((enemy) => enemy.alive && !enemy.friendly && enemy.nid === tower.charge.nid);
-        const ring = tower.charge.fx.ring;
-        const lock = tower.charge.fx.lock;
-        const line = tower.charge.fx.line;
         if (target) {
           const [px, py] = posOf(target);
           tower.charge.x = px;
           tower.charge.y = py;
-          if (lock) lock.setAttribute('transform', `translate(${px.toFixed(1)} ${py.toFixed(1)})`);
-          if (line) { line.setAttribute('x2', px.toFixed(1)); line.setAttribute('y2', py.toFixed(1)); }
         }
         tower.charge.t -= dt;
-        if (ring) {
-          ring.setAttribute('cx', tower.x);
-          ring.setAttribute('cy', tower.y);
-          ring.setAttribute('r', (6 + 30 * (1 - Math.max(0, tower.charge.t) / (es.warrantCd || 12))).toFixed(1));
-        }
-        if (line) { line.setAttribute('x1', tower.x); line.setAttribute('y1', tower.y); }
         if (!target) {
           // The sentenced hull died mid-charge — the verdict transfers to the
           // next beefiest hull in reach, or holds fully wound until one shows.
@@ -2381,7 +2435,7 @@ function acquireTarget(tower) {
 function aimHead(tower, target) {
   const [ex, ey] = posOf(target);
   const angle = (Math.atan2(ey - tower.y, ex - tower.x) * 180) / Math.PI;
-  if (tower.head) tower.head.setAttribute('transform', `rotate(${angle.toFixed(1)})`);
+  tower.aim = angle;
 }
 
 // --- WAR DRUMS aura: FRAG ROUNDS ----------------------------------------------------
@@ -2425,27 +2479,14 @@ function acquireWarrantTarget(tower, es) {
 }
 
 function beginWarrantCharge(tower, target, es) {
-  const ring = svgNode('circle', { class: 'fx-warrant-ring', cx: tower.x, cy: tower.y, r: 6 });
-  const lock = svgNode('g', { class: 'fx-warrant-lock' });
-  lock.appendChild(svgNode('path', { d: 'M0 -14 L14 0 L0 14 L-14 0 Z' }));
   const [px, py] = posOf(target);
-  lock.setAttribute('transform', `translate(${px.toFixed(1)} ${py.toFixed(1)})`);
-  const line = svgNode('line', { class: 'fx-warrant-line', x1: tower.x, y1: tower.y, x2: px.toFixed(1), y2: py.toFixed(1) });
-  ui.layers.fx.appendChild(line);
-  ui.layers.fx.appendChild(ring);
-  ui.layers.fx.appendChild(lock);
-  tower.charge = { nid: target.nid, x: px, y: py, t: es.warrantCd || 12, fx: { ring, lock, line } };
-  tower.node.classList.add('tw-charging');
+  tower.charge = { nid: target.nid, x: px, y: py, t: es.warrantCd || 12, total: es.warrantCd || 12 };
   emit('float', tower.x, tower.y - 52, 'VERDICT LOCKED', 'core-float');
   emit('sound', 'alarm');
 }
 
 function dropWarrantCharge(tower) {
-  if (tower.charge) {
-    for (const el of Object.values(tower.charge.fx)) el.remove();
-    tower.charge = null;
-  }
-  tower.node.classList.remove('tw-charging');
+  tower.charge = null;
 }
 
 function fireWarrant(tower, target, es) {
@@ -2820,7 +2861,7 @@ board.addEventListener('click', (event) => {
   }
   const node = event.target.closest ? event.target.closest('.tower') : null;
   if (node) {
-    const tower = state.towers.find((item) => item.node === node);
+    const tower = state.towers.find((item) => (item.uid ? String(item.uid) === node.dataset.uid : item.node === node));
     if (tower) openTowerPanel(tower);
   }
 });
