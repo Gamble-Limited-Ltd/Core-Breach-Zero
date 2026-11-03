@@ -45,19 +45,27 @@ function limitToast(entry) {
 
 
 // --- Mission state ----------------------------------------------------------------
+// Simulation state: plain data only (the part a server can run). Anything that touches the page lives in `ui`.
 const state = {
   mode: 'idle', // idle | vote | countdown | waves | over
-  protocol: 'easy', speed2x: false, bossHpMult: 1, speedBtn: null, nukeBtn: null,
-  nukeAim: false, crosshair: null, wasteZones: [],
+  protocol: 'easy', speed2x: false, bossHpMult: 1,
+  wasteZones: [],
   map: null, samplers: [], gateEvents: [], zoneRanges: [],
   waveIndex: -1, queue: [], spawnGap: 0, intermission: 0, countdown: 0,
   cash: 0, baseHp: BASE_MAX, enemies: [], kills: 0, bossesKilled: 0, earned: 0, clock: 0, nidSeq: 0,
-  towers: [], projectiles: [], building: null, ghost: null, bar: null, towerPanel: null, panelTower: null,
-  bonusNc: 0, mouseX: 500, mouseY: 300, mouseOn: false,
+  towers: [], projectiles: [],
+  bonusNc: 0,
+  corpseLust: 0, // reserved telemetry: total Blood Lust banked across Blossoms
+};
+
+// View/input state: DOM handles, pointer, build mode, frame timer. Never read by sim rules.
+const ui = {
+  speedBtn: null, nukeBtn: null, nukeAim: false, crosshair: null,
+  building: null, ghost: null, bar: null, towerPanel: null, panelTower: null,
+  mouseX: 500, mouseY: 300, mouseOn: false,
   raf: 0, last: 0,
   hud: null, bossBar: null, tip: null, tipTarget: null, votePanel: null, endPanel: null, banner: null,
   layers: null, deployBtn: null,
-  corpseLust: 0, // reserved telemetry: total Blood Lust banked across Blossoms
 };
 
 const debugWave = Number(new URLSearchParams(location.search).get('cbzwave') || 0);
@@ -265,7 +273,7 @@ function spawnEnemy(key, pathIdx) {
   g.addEventListener('pointerenter', (event) => showTip(enemy, event));
   g.addEventListener('pointermove', moveTip);
   g.addEventListener('pointerleave', () => hideTip(enemy));
-  state.layers.enemies.appendChild(g);
+  ui.layers.enemies.appendChild(g);
   state.enemies.push(enemy);
   const [x, y] = enemy.flight ? flightPos(enemy, enemy.dist) : state.samplers[pathIdx].at(enemy.dist);
   enemy.fx = x;
@@ -354,7 +362,7 @@ function corpseBlossomFeed(enemy, x, y, src) {
     if (lvl >= 4) {
       tower.lust = (tower.lust || 0) + (effStats(tower).lust || 1);
       floatText(tower.x, tower.y - 44, `BLOOD LUST ${tower.lust}`, 'lust-float');
-      if (state.panelTower === tower) openTowerPanel(tower); // live lust counter
+      if (ui.panelTower === tower) openTowerPanel(tower); // live lust counter
     }
     spawnSummon(enemy, tower, src === 'veins' && lvl >= 2);
   }
@@ -370,7 +378,7 @@ function graveWardenFeed(enemy, x, y) {
     if (Math.hypot(x - tower.x, y - tower.y) > effStats(tower).rng) continue;
     tower.tollCharges = (tower.tollCharges || 0) + 1;
     tower.bellCd = Math.max(0, (tower.bellCd || 0) - 0.4);
-    if (state.panelTower === tower) openTowerPanel(tower); // live toll counter
+    if (ui.panelTower === tower) openTowerPanel(tower); // live toll counter
   }
 }
 
@@ -425,11 +433,11 @@ function spawnSummon(enemy, tower, stained) {
   }
   g.setAttribute('transform', `translate(${summon.fx.toFixed(1)} ${summon.fy.toFixed(1)})`);
   const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: summon.fx, cy: summon.fy, r: 6 });
-  state.layers.fx.appendChild(bloom);
+  ui.layers.fx.appendChild(bloom);
   setTimeout(() => bloom.remove(), 720);
   g.classList.add('spawn-in');
   setTimeout(() => g.classList.remove('spawn-in'), 420);
-  state.layers.enemies.appendChild(g);
+  ui.layers.enemies.appendChild(g);
   state.enemies.push(summon);
   g.addEventListener('pointerenter', (event) => showSummonTip(summon, event));
   g.addEventListener('pointermove', moveTip);
@@ -542,9 +550,9 @@ function launchStrikeDrone(tower) {
   };
   g.setAttribute('transform', `translate(${tower.x.toFixed(1)} ${tower.y.toFixed(1)})`);
   const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: tower.x, cy: tower.y, r: 6 });
-  state.layers.fx.appendChild(bloom);
+  ui.layers.fx.appendChild(bloom);
   setTimeout(() => bloom.remove(), 720);
-  state.layers.enemies.appendChild(g);
+  ui.layers.enemies.appendChild(g);
   state.enemies.push(drone);
   g.addEventListener('pointerenter', (event) => showSummonTip(drone, event));
   g.addEventListener('pointermove', moveTip);
@@ -605,7 +613,7 @@ function flightPos(enemy, progress) {
 // --- FX -------------------------------------------------------------------------------
 function fxRing(x, y, cls) {
   const ring = svgNode('circle', { class: `fx-ring ${cls}`, cx: x, cy: y, r: 6 });
-  state.layers.fx.appendChild(ring);
+  ui.layers.fx.appendChild(ring);
   setTimeout(() => ring.remove(), 650);
 }
 
@@ -619,7 +627,7 @@ function fxNukeBlast(x, y) {
   for (const [cls, delay] of [['fx-nuke-ring', 0], ['fx-nuke-ring slow', 150]]) {
     setTimeout(() => {
       const ring = svgNode('circle', { class: `fx-ring ${cls}`, cx: x, cy: y, r: 10 });
-      state.layers.fx.appendChild(ring);
+      ui.layers.fx.appendChild(ring);
       setTimeout(() => ring.remove(), 1400);
     }, delay);
   }
@@ -629,7 +637,7 @@ function fxNukeBlast(x, y) {
 // Blood Purge: crimson shockwave swells to the full curse radius.
 function fxPurgeBlast(tower) {
   const ring = svgNode('circle', { class: 'fx-ring fx-purge-ring', cx: tower.x, cy: tower.y, r: 8 });
-  state.layers.fx.appendChild(ring);
+  ui.layers.fx.appendChild(ring);
   setTimeout(() => ring.remove(), 950);
   fxRing(tower.x, tower.y, 'fx-ring-virus');
 }
@@ -650,15 +658,15 @@ function fxScreamBlast(tower, buffed) {
 
 function floatText(x, y, text, cls) {
   const label = svgNode('text', { class: `float-text ${cls}`, x, y, 'text-anchor': 'middle' }, text);
-  state.layers.fx.appendChild(label);
+  ui.layers.fx.appendChild(label);
   setTimeout(() => label.remove(), 950);
 }
 
 // --- Main loop ------------------------------------------------------------------------
 function tick(ts) {
-  state.raf = requestAnimationFrame(tick);
-  let dt = Math.min(0.05, (ts - state.last) / 1000 || 0);
-  state.last = ts;
+  ui.raf = requestAnimationFrame(tick);
+  let dt = Math.min(0.05, (ts - ui.last) / 1000 || 0);
+  ui.last = ts;
   if (state.speed2x) dt *= 2; // OVERDRIVE perk: the whole sim runs at double tempo
   state.clock += dt;
   if (coopGuest()) { guestFrame(dt); return; }
@@ -841,7 +849,7 @@ function runWaves(dt) {
       if (interest <= 0) continue;
       tower.bank += interest;
       floatText(tower.x, tower.y - 40, `+$${interest} BOND`, 'cash-float');
-      if (state.panelTower === tower) openTowerPanel(tower);
+      if (ui.panelTower === tower) openTowerPanel(tower);
     }
     const hardMult = state.protocol === 'hard' ? 0.85 : state.protocol === 'insane' ? 0.7 : state.protocol === 'crimson' ? 0.7 : 1; // HELL PAYS WORSE — salvage is blood in HARD, the DOUBLED SPIRAL pays 70%, and the dawn bleeds you for 70%
     const bonus = Math.round((30 + (state.waveIndex + 1) * 7) * hardMult) + rigYield;
@@ -894,31 +902,31 @@ function beginWave(index) {
 
 // --- Combat HUD -----------------------------------------------------------------------
 function ensureHud() {
-  if (!state.hud) {
-    state.hud = document.createElement('div');
-    state.hud.className = 'combat-hud';
-    state.hud.innerHTML = `
+  if (!ui.hud) {
+    ui.hud = document.createElement('div');
+    ui.hud.className = 'combat-hud';
+    ui.hud.innerHTML = `
       <div class="hud-block hud-wave"><span class="hud-label">WAVE</span><strong id="combat-wave">—</strong></div>
       <div class="hud-block hud-protocol"><span class="hud-label">PROTOCOL</span><strong id="combat-protocol">—</strong></div>
       <div class="hud-block hud-base"><span class="hud-label">BASE INTEGRITY</span><div class="base-track"><div class="base-fill" id="base-fill"></div></div><b id="base-num">100</b></div>
       <div class="hud-block hud-cash"><span class="hud-label">SALVAGE</span><strong id="combat-cash">$0</strong></div>`;
-    if (!state.bossBar) {
-      state.bossBar = document.createElement('div');
-      state.bossBar.className = 'boss-bar';
-      state.bossBar.hidden = true;
-      state.bossBar.innerHTML = `<span class="hud-label" id="boss-name">BOSS</span><div class="boss-track"><div class="boss-fill" id="boss-fill"></div><div class="boss-shield" id="boss-shield"></div></div>`;
-      battlefield.appendChild(state.bossBar);
+    if (!ui.bossBar) {
+      ui.bossBar = document.createElement('div');
+      ui.bossBar.className = 'boss-bar';
+      ui.bossBar.hidden = true;
+      ui.bossBar.innerHTML = `<span class="hud-label" id="boss-name">BOSS</span><div class="boss-track"><div class="boss-fill" id="boss-fill"></div><div class="boss-shield" id="boss-shield"></div></div>`;
+      battlefield.appendChild(ui.bossBar);
     }
   }
   const exit = document.querySelector('#exit-battle');
   const deploy = document.querySelector('#deploy-mission');
-  state.deployBtn = deploy;
+  ui.deployBtn = deploy;
   exit.textContent = 'ABORT MISSION';
   exit.classList.add('aborting');
   deploy.hidden = true;
-  document.querySelector('.field-hud').insertBefore(state.hud, exit);
+  document.querySelector('.field-hud').insertBefore(ui.hud, exit);
   // OVERDRIVE perk: TIME x2 toggle — only rendered once the achievement decrypts it.
-  if (!state.speedBtn && window.CBZPerks && CBZPerks.has('overdrive')) {
+  if (!ui.speedBtn && window.CBZPerks && CBZPerks.has('overdrive')) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'speed-toggle';
@@ -929,16 +937,16 @@ function ensureHud() {
       btn.classList.toggle('on', state.speed2x);
       playSound();
     });
-    state.speedBtn = btn;
+    ui.speedBtn = btn;
   }
-  if (state.speedBtn) {
+  if (ui.speedBtn) {
     state.speed2x = false;
-    state.speedBtn.textContent = 'TIME x1';
-    state.speedBtn.classList.remove('on');
-    document.querySelector('.field-hud').insertBefore(state.speedBtn, exit);
+    ui.speedBtn.textContent = 'TIME x1';
+    ui.speedBtn.classList.remove('on');
+    document.querySelector('.field-hud').insertBefore(ui.speedBtn, exit);
   }
   // Nuclear Fall Out: strike button lives next to the time toggle once a rig deploys.
-  if (!state.nukeBtn) {
+  if (!ui.nukeBtn) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'nuke-toggle';
@@ -946,22 +954,22 @@ function ensureHud() {
     btn.addEventListener('click', () => {
       const rig = readyRig();
       if (!rig) { playSound('alarm'); showToast('Nuclear strike needs the rig at Tier 6 — Nuclear Fall Out.'); return; }
-      if (state.nukeAim) { setNukeAim(false); return; }
+      if (ui.nukeAim) { setNukeAim(false); return; }
       if ((rig.nukeCd || 0) > 0) { playSound('alarm'); showToast(`Nuke recharging — ${Math.ceil(rig.nukeCd)}s left.`); return; }
       if (state.cash < NUKE_COST) { playSound('alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); return; }
       setNukeAim(true);
       playSound();
     });
-    state.nukeBtn = btn;
+    ui.nukeBtn = btn;
   }
-  state.nukeAim = false;
-  if (state.crosshair) { state.crosshair.remove(); state.crosshair = null; }
+  ui.nukeAim = false;
+  if (ui.crosshair) { ui.crosshair.remove(); ui.crosshair = null; }
   paintNukeButton();
-  document.querySelector('.field-hud').insertBefore(state.nukeBtn, exit);
+  document.querySelector('.field-hud').insertBefore(ui.nukeBtn, exit);
 }
 
 function updateHud() {
-  if (!state.hud) return;
+  if (!ui.hud) return;
   document.querySelector('#combat-wave').textContent = state.waveIndex < 0 ? '—' : `${String(state.waveIndex + 1).padStart(2, '0')}/${missionWaves().length}`;
   document.querySelector('#combat-cash').textContent = `$${state.cash}`;
   const fill = document.querySelector('#base-fill');
@@ -998,36 +1006,36 @@ function readyRig() {
 }
 
 function setNukeAim(on) {
-  state.nukeAim = Boolean(on);
-  if (state.crosshair) { state.crosshair.remove(); state.crosshair = null; }
-  if (state.nukeAim) {
+  ui.nukeAim = Boolean(on);
+  if (ui.crosshair) { ui.crosshair.remove(); ui.crosshair = null; }
+  if (ui.nukeAim) {
     setBuilding(null);
-    state.crosshair = svgNode('g', { class: 'nuke-crosshair' });
-    state.crosshair.appendChild(svgNode('circle', { class: 'nuke-blast', r: NUKE_RADIUS }));
-    state.crosshair.appendChild(svgNode('circle', { class: 'nuke-waste', r: WASTE_RADIUS }));
+    ui.crosshair = svgNode('g', { class: 'nuke-crosshair' });
+    ui.crosshair.appendChild(svgNode('circle', { class: 'nuke-blast', r: NUKE_RADIUS }));
+    ui.crosshair.appendChild(svgNode('circle', { class: 'nuke-waste', r: WASTE_RADIUS }));
     const label = svgNode('text', { class: 'nuke-label', y: -NUKE_RADIUS - 12, 'text-anchor': 'middle' }, 'NUCLEAR FALL OUT');
-    state.crosshair.appendChild(label);
-    state.layers.fx.appendChild(state.crosshair);
-    paintGhost(state.mouseX, state.mouseY);
+    ui.crosshair.appendChild(label);
+    ui.layers.fx.appendChild(ui.crosshair);
+    paintGhost(ui.mouseX, ui.mouseY);
   }
-  if (state.nukeBtn) paintNukeButton();
+  if (ui.nukeBtn) paintNukeButton();
 }
 
 function paintNukeButton() {
-  if (!state.nukeBtn) return;
+  if (!ui.nukeBtn) return;
   const rig = state.towers.find((tower) => tower.id === 'zeroday') || null;
   const armed = readyRig();
-  state.nukeBtn.hidden = !rig;
-  state.nukeBtn.disabled = Boolean(rig) && !armed; // visible the moment a rig deploys — locked until Tier 6
+  ui.nukeBtn.hidden = !rig;
+  ui.nukeBtn.disabled = Boolean(rig) && !armed; // visible the moment a rig deploys — locked until Tier 6
   if (!rig) return;
   const cd = armed ? (armed.nukeCd || 0) : 0;
-  state.nukeBtn.textContent = state.nukeAim ? 'CLICK TARGET — ESC CANCELS'
+  ui.nukeBtn.textContent = ui.nukeAim ? 'CLICK TARGET — ESC CANCELS'
     : !armed ? 'NUKE — RIG TIER 6 REQUIRED'
     : cd > 0 ? `NUKE ${Math.ceil(cd)}s`
     : `NUKE READY — $${NUKE_COST}`;
-  state.nukeBtn.classList.toggle('on', state.nukeAim);
-  state.nukeBtn.classList.toggle('cd', cd > 0 && !state.nukeAim);
-  state.nukeBtn.classList.toggle('lock', Boolean(rig) && !armed);
+  ui.nukeBtn.classList.toggle('on', ui.nukeAim);
+  ui.nukeBtn.classList.toggle('cd', cd > 0 && !ui.nukeAim);
+  ui.nukeBtn.classList.toggle('lock', Boolean(rig) && !armed);
 }
 
 function fireNuke(x, y) {
@@ -1044,7 +1052,7 @@ function fireNuke(x, y) {
     if (Math.hypot(px - x, py - y) <= NUKE_RADIUS) damageEnemy(enemy, NUKE_DAMAGE, { src: 'nuke', friendlyFire: true });
   }
   const node = svgNode('circle', { class: 'fx-waste', cx: x, cy: y, r: WASTE_RADIUS });
-  state.layers.fx.appendChild(node);
+  ui.layers.fx.appendChild(node);
   state.wasteZones.push({ x, y, r: WASTE_RADIUS, until: state.clock + WASTE_SECONDS, node });
   fxNukeBlast(x, y);
   floatText(x, y - NUKE_RADIUS - 20, 'NUCLEAR FALL OUT', 'core-float');
@@ -1094,8 +1102,8 @@ function bloodScream(tower) {
 
 function updateBossBar() {
   const boss = state.enemies.find((enemy) => enemy.alive && enemy.t.boss && !enemy.friendly);
-  state.bossBar.hidden = !boss;
-  state.bossBar.style.display = boss ? '' : 'none';
+  ui.bossBar.hidden = !boss;
+  ui.bossBar.style.display = boss ? '' : 'none';
   if (!boss) return;
   document.querySelector('#boss-name').textContent = `${boss.t.tag} // ${boss.t.name}`;
   document.querySelector('#boss-fill').style.width = `${(boss.hp / boss.maxHp) * 100}%`;
@@ -1104,19 +1112,19 @@ function updateBossBar() {
 
 // --- Enemy hover tooltip ----------------------------------------------------------------
 function ensureTip() {
-  if (state.tip) return;
-  state.tip = document.createElement('div');
-  state.tip.className = 'enemy-tip';
-  state.tip.hidden = true;
-  battlefield.appendChild(state.tip);
+  if (ui.tip) return;
+  ui.tip = document.createElement('div');
+  ui.tip.className = 'enemy-tip';
+  ui.tip.hidden = true;
+  battlefield.appendChild(ui.tip);
 }
 
 function showTip(enemy, event) {
   ensureTip();
-  state.tipTarget = enemy;
+  ui.tipTarget = enemy;
   const t = enemy.t;
   const armor = t.armor ? `${Math.round(t.armor * 100)}% PLATE` : 'NONE';
-  state.tip.innerHTML = `
+  ui.tip.innerHTML = `
     <div class="tip-head"><b>${t.name}</b><span class="tip-tag">${t.tag}</span></div>
     <div class="tip-hp"><div class="tip-hp-track"><div class="tip-hp-fill" style="width:${(enemy.hp / enemy.maxHp) * 100}%"></div></div><span>${Math.ceil(enemy.hp)}/${enemy.maxHp} HP${enemy.shield > 0 ? ` +${Math.ceil(enemy.shield)} SHLD` : ''}</span></div>
     <div class="tip-rows">
@@ -1126,26 +1134,26 @@ function showTip(enemy, event) {
       <div><span>BOUNTY</span><b>$${t.bounty}</b></div>
     </div>
     <p class="tip-ability">${t.ability}</p>`;
-  state.tip.hidden = false;
+  ui.tip.hidden = false;
   moveTip(event);
 }
 
 function moveTip(event) {
-  if (!state.tip || state.tip.hidden) return;
+  if (!ui.tip || ui.tip.hidden) return;
   const pad = 16;
-  const x = event ? event.clientX : state.mouseX || 100;
-  const y = event ? event.clientY : state.mouseY || 100;
-  state.mouseX = x;
-  state.mouseY = y;
-  const wide = state.tip.offsetWidth || 240;
-  state.tip.style.left = `${Math.min(window.innerWidth - wide - 10, x + pad)}px`;
-  state.tip.style.top = `${Math.max(10, y - state.tip.offsetHeight - pad)}px`;
+  const x = event ? event.clientX : ui.mouseX || 100;
+  const y = event ? event.clientY : ui.mouseY || 100;
+  ui.mouseX = x;
+  ui.mouseY = y;
+  const wide = ui.tip.offsetWidth || 240;
+  ui.tip.style.left = `${Math.min(window.innerWidth - wide - 10, x + pad)}px`;
+  ui.tip.style.top = `${Math.max(10, y - ui.tip.offsetHeight - pad)}px`;
 }
 
 function hideTip(enemy) {
-  if (!state.tip || (enemy && state.tipTarget !== enemy)) return;
-  state.tip.hidden = true;
-  state.tipTarget = null;
+  if (!ui.tip || (enemy && ui.tipTarget !== enemy)) return;
+  ui.tip.hidden = true;
+  ui.tipTarget = null;
 }
 
 // Friendly intel — Blossom risen copies and strike drones get their own readout.
@@ -1153,16 +1161,16 @@ function hideTip(enemy) {
 // name, tag and the live hull. No allegiance chatter, no payload rows.
 function showSummonTip(summon, event) {
   ensureTip();
-  state.tipTarget = summon;
+  ui.tipTarget = summon;
   const t = summon.t;
   const soul = summon.key === 'soul';
   const drone = summon.key === 'drone';
   const head = soul ? 'VENGEFUL SOUL' : drone ? 'STRIKE DRONE' : `RISEN ${t.name}`;
   const tag = soul ? 'GRAVE WARDEN CHOIR' : drone ? 'DRONE SPAWNER PAYLOAD' : 'CORPSE BLOSSOM SPAWN';
-  state.tip.innerHTML = `
+  ui.tip.innerHTML = `
     <div class="tip-head summon"><b>${head}</b><span class="tip-tag">${tag}</span></div>
     <div class="tip-hp"><div class="tip-hp-track"><div class="tip-hp-fill" style="width:${(summon.hp / summon.maxHp) * 100}%"></div></div><span>${Math.ceil(summon.hp)}/${summon.maxHp} HP</span></div>`;
-  state.tip.hidden = false;
+  ui.tip.hidden = false;
   moveTip(event);
 }
 
@@ -1170,17 +1178,17 @@ function showSummonTip(summon, event) {
 function banner(title, sub, cls) {
   state.syncTitle = String(title || '');
   state.syncSeq = (state.syncSeq || 0) + 1;
-  if (!state.banner) {
-    state.banner = document.createElement('div');
-    state.banner.className = 'wave-banner';
-    battlefield.appendChild(state.banner);
+  if (!ui.banner) {
+    ui.banner = document.createElement('div');
+    ui.banner.className = 'wave-banner';
+    battlefield.appendChild(ui.banner);
   }
-  state.banner.className = `wave-banner ${cls || 'banner-wave'}`;
-  state.banner.innerHTML = `<strong>${title}</strong>${sub ? `<span>${sub}</span>` : ''}`;
-  void state.banner.offsetWidth;
-  state.banner.classList.add('show');
-  clearTimeout(state.bannerTimer);
-  state.bannerTimer = setTimeout(() => state.banner.classList.remove('show'), 2100);
+  ui.banner.className = `wave-banner ${cls || 'banner-wave'}`;
+  ui.banner.innerHTML = `<strong>${title}</strong>${sub ? `<span>${sub}</span>` : ''}`;
+  void ui.banner.offsetWidth;
+  ui.banner.classList.add('show');
+  clearTimeout(ui.bannerTimer);
+  ui.bannerTimer = setTimeout(() => ui.banner.classList.remove('show'), 2100);
 }
 
 // --- Mode vote (EASY + MEDIUM live, the rest coming soon) --------------------------------
@@ -1210,7 +1218,7 @@ function showVote(context) {
       <button class="inline-button" id="vote-cancel" type="button">CANCEL</button>
     </div>`;
   battlefield.appendChild(panel);
-  state.votePanel = panel;
+  ui.votePanel = panel;
   panel.querySelector('#vote-cancel').addEventListener('click', () => { closeVote(); restoreRecon(); });
   panel.querySelectorAll('.mode-card:not(.locked)').forEach((card) => card.addEventListener('click', () => castVote(card.dataset.mode)));
   playSound();
@@ -1223,7 +1231,7 @@ function castVote(mode) {
 }
 
 function closeVote() {
-  if (state.votePanel) { state.votePanel.remove(); state.votePanel = null; }
+  if (ui.votePanel) { ui.votePanel.remove(); ui.votePanel = null; }
 }
 
 // --- Mission lifecycle ------------------------------------------------------------------
@@ -1243,9 +1251,9 @@ function startMission(map, skipVote = false, forcedProtocol = null) {
   state.towers = [];
   state.projectiles = [];
   state.wasteZones = [];
-  state.nukeAim = false;
+  ui.nukeAim = false;
   state.bonusNc = 0;
-  state.building = null;
+  ui.building = null;
   state.kills = 0;
   state.bossesKilled = 0;
   state.earned = 0;
@@ -1276,8 +1284,8 @@ function launchCombat(mode) {
   state.mode = 'countdown';
   state.countdown = 3.4;
   state.lastCount = 4;
-  state.last = performance.now();
-  state.raf = requestAnimationFrame(tick);
+  ui.last = performance.now();
+  ui.raf = requestAnimationFrame(tick);
   playSound();
 }
 
@@ -1286,20 +1294,20 @@ function restoreRecon() {
   const exit = document.querySelector('#exit-battle');
   exit.textContent = 'EXIT RECON';
   exit.classList.remove('aborting');
-  if (state.deployBtn) state.deployBtn.hidden = false;
-  if (state.hud) { state.hud.remove(); state.hud = null; }
-  if (state.speedBtn) { state.speedBtn.remove(); state.speedBtn = null; }
+  if (ui.deployBtn) ui.deployBtn.hidden = false;
+  if (ui.hud) { ui.hud.remove(); ui.hud = null; }
+  if (ui.speedBtn) { ui.speedBtn.remove(); ui.speedBtn = null; }
   state.speed2x = false;
-  if (state.nukeBtn) { state.nukeBtn.remove(); state.nukeBtn = null; }
-  state.nukeAim = false;
-  if (state.crosshair) { state.crosshair.remove(); state.crosshair = null; }
+  if (ui.nukeBtn) { ui.nukeBtn.remove(); ui.nukeBtn = null; }
+  ui.nukeAim = false;
+  if (ui.crosshair) { ui.crosshair.remove(); ui.crosshair = null; }
   state.wasteZones = [];
-  if (state.bossBar) state.bossBar.hidden = true;
-  if (state.endPanel) { state.endPanel.remove(); state.endPanel = null; }
+  if (ui.bossBar) ui.bossBar.hidden = true;
+  if (ui.endPanel) { ui.endPanel.remove(); ui.endPanel = null; }
   setBuilding(null);
   closeTowerPanel();
-  if (state.bar) { state.bar.remove(); state.bar = null; }
-  if (state.layers) { state.layers.enemies.remove(); state.layers.fx.remove(); if (state.layers.towers) state.layers.towers.remove(); state.layers = null; }
+  if (ui.bar) { ui.bar.remove(); ui.bar = null; }
+  if (ui.layers) { ui.layers.enemies.remove(); ui.layers.fx.remove(); if (ui.layers.towers) ui.layers.towers.remove(); ui.layers = null; }
   state.enemies = [];
   state.towers = [];
   state.projectiles = [];
@@ -1333,7 +1341,7 @@ function paintPayout(panel, data) {
 
 function endMission(win, fromSync = false) {
   state.mode = 'over';
-  cancelAnimationFrame(state.raf);
+  cancelAnimationFrame(ui.raf);
   if (coopHost()) { const bridge = window.CBZCoopBridge; if (bridge && bridge.send) bridge.send({ k: 'over', win }); }
   closeVote();
   hideTip();
@@ -1361,7 +1369,7 @@ function endMission(win, fromSync = false) {
       </div>
     </div>`;
   battlefield.appendChild(panel);
-  state.endPanel = panel;
+  ui.endPanel = panel;
   if (window.CBZShop) {
     CBZShop.submitMission({
       result: win ? 'win' : 'loss',
@@ -1373,7 +1381,7 @@ function endMission(win, fromSync = false) {
       map: state.map ? state.map.id : '',
     }).then((data) => paintPayout(panel, data));
   }
-  if (!eventMode) panel.querySelector('#end-redeploy').addEventListener('click', () => { panel.remove(); state.endPanel = null; resetBoard(); startMission(state.map); });
+  if (!eventMode) panel.querySelector('#end-redeploy').addEventListener('click', () => { panel.remove(); ui.endPanel = null; resetBoard(); startMission(state.map); });
   panel.querySelector('#end-bay').addEventListener('click', () => { resetBoard(); restoreRecon(); openMenu('play'); });
   notifyRoomEnded();
   banner(win ? 'SECTOR CLEARED' : 'CORE BREACHED', win ? '// VICTORY TOKEN EARNED' : '// EVACUATE', win ? 'banner-green' : 'banner-red');
@@ -1381,7 +1389,7 @@ function endMission(win, fromSync = false) {
 }
 
 function resetBoard() {
-  if (state.layers) { state.layers.enemies.remove(); state.layers.fx.remove(); }
+  if (ui.layers) { ui.layers.enemies.remove(); ui.layers.fx.remove(); }
   state.enemies = [];
   ensureLayers();
 }
@@ -1394,22 +1402,22 @@ function ensureLayers() {
   board.appendChild(towers);
   board.appendChild(enemies);
   board.appendChild(fx);
-  state.layers = { towers, enemies, fx, ghost: null };
-  state.ghost = null;
+  ui.layers = { towers, enemies, fx, ghost: null };
+  ui.ghost = null;
 }
 
 function abort() {
   if (state.mode === 'idle') return;
-  cancelAnimationFrame(state.raf);
+  cancelAnimationFrame(ui.raf);
   closeVote();
-  if (state.endPanel) { state.endPanel.remove(); state.endPanel = null; }
-  if (state.tip) state.tip.hidden = true;
+  if (ui.endPanel) { ui.endPanel.remove(); ui.endPanel = null; }
+  if (ui.tip) ui.tip.hidden = true;
   restoreRecon();
 }
 
 // --- Deployment loadout bar (the 5 bays you brought) -----------------------------------
 function ensureLoadoutBar() {
-  if (state.bar) state.bar.remove();
+  if (ui.bar) ui.bar.remove();
   const shop = window.CBZShop;
   const loadout = shop && shop.loadout ? shop.loadout() : [];
   const bar = document.createElement('div');
@@ -1425,7 +1433,7 @@ function ensureLoadoutBar() {
     <div class="lo-slots">${slots}</div>
     <div class="lo-hint">PICK A BAY (1-5) → CLICK THE GRID TO DEPLOY · HEX PADS = ANTI-AIR · CLICK A DEPLOYED UNIT → UPGRADE LADDER · RIGHT-CLICK / ESC TO STOP</div>`;
   battlefield.appendChild(bar);
-  state.bar = bar;
+  ui.bar = bar;
   bar.addEventListener('click', (event) => {
     const slot = event.target.closest('.lo-slot[data-tower]');
     if (!slot) return;
@@ -1434,22 +1442,22 @@ function ensureLoadoutBar() {
 }
 
 function refreshBarAfford() {
-  if (!state.bar) return;
-  state.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
+  if (!ui.bar) return;
+  ui.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
     const entry = window.CBZShop && CBZShop.TOWERS.find((item) => item.id === slot.dataset.tower);
     slot.classList.toggle('poor', Boolean(entry && state.cash < entry.cost));
   });
-  const head = state.bar.querySelector('.lo-head b');
+  const head = ui.bar.querySelector('.lo-head b');
   if (head) head.textContent = `${state.towers.length}/${towerLimit()} DEPLOYED`;
 }
 
 function refreshPanelAfford() {
-  if (!state.towerPanel || !state.panelTower) return;
-  const tower = state.panelTower;
+  if (!ui.towerPanel || !ui.panelTower) return;
+  const tower = ui.panelTower;
   const tiers = towerTrack(tower);
   const lvl = trackLevel(tower);
   const next = tiers[lvl];
-  state.towerPanel.querySelectorAll('.tp-buy').forEach((button) => {
+  ui.towerPanel.querySelectorAll('.tp-buy').forEach((button) => {
     const index = Number(button.dataset.tier);
     if (Number.isNaN(index) || index !== lvl) { button.disabled = true; return; }
     button.disabled = Boolean(next) && state.cash < next.cost;
@@ -1462,7 +1470,7 @@ function buildingAllowed() {
 
 function toggleBuild(id) {
   if (!buildingAllowed()) return;
-  if (state.building && state.building.id === id) { setBuilding(null); return; }
+  if (ui.building && ui.building.id === id) { setBuilding(null); return; }
   const entry = window.CBZShop && CBZShop.TOWERS.find((item) => item.id === id);
   if (!entry) return;
   const limit = towerLimit();
@@ -1477,20 +1485,20 @@ function toggleBuild(id) {
 }
 
 function setBuilding(entry) {
-  state.building = entry || null;
-  board.classList.toggle('placing', Boolean(state.building));
+  ui.building = entry || null;
+  board.classList.toggle('placing', Boolean(ui.building));
   closeTowerPanel();
-  if (state.bar) {
-    state.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
-      slot.classList.toggle('on', Boolean(state.building) && slot.dataset.tower === state.building.id);
+  if (ui.bar) {
+    ui.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
+      slot.classList.toggle('on', Boolean(ui.building) && slot.dataset.tower === ui.building.id);
     });
   }
-  if (state.building) {
+  if (ui.building) {
     ensureGhost();
-    paintGhost(state.mouseX, state.mouseY);
-  } else if (state.ghost) {
-    state.ghost.remove();
-    state.ghost = null;
+    paintGhost(ui.mouseX, ui.mouseY);
+  } else if (ui.ghost) {
+    ui.ghost.remove();
+    ui.ghost = null;
   }
   playSound('hover');
 }
@@ -1536,15 +1544,15 @@ function toScreen(x, y) {
 }
 
 function ensureGhost() {
-  if (!state.layers || !state.building) return;
-  if (state.ghost && state.ghostEntry === state.building) return;
-  if (state.ghost) { state.ghost.remove(); state.ghost = null; }
-  if (!state.layers.ghost) {
+  if (!ui.layers || !ui.building) return;
+  if (ui.ghost && ui.ghostEntry === ui.building) return;
+  if (ui.ghost) { ui.ghost.remove(); ui.ghost = null; }
+  if (!ui.layers.ghost) {
     const ghost = svgNode('g', { class: 'layer-ghost' });
     board.appendChild(ghost);
-    state.layers.ghost = ghost;
+    ui.layers.ghost = ghost;
   }
-  const entry = state.building;
+  const entry = ui.building;
   const rng = entry.stats.rng >= 999 ? 300 : entry.stats.rng;
   const g = svgNode('g', { class: 'tw-ghost' });
   g.appendChild(svgNode('circle', { class: 'tw-range', r: rng }));
@@ -1558,22 +1566,22 @@ function ensureGhost() {
   const note = svgNode('text', { class: 'tw-ghost-note', y: -34, 'text-anchor': 'middle' }, entry.name);
   g.appendChild(note);
   g.appendChild(svgNode('text', { class: 'tw-ghost-reason', y: 44, 'text-anchor': 'middle' }, ''));
-  state.layers.ghost.appendChild(g);
-  state.ghost = g;
-  state.ghostEntry = entry;
+  ui.layers.ghost.appendChild(g);
+  ui.ghost = g;
+  ui.ghostEntry = entry;
 }
 
 function paintGhost(x, y) {
-  if (!state.ghost || !state.building) return;
+  if (!ui.ghost || !ui.building) return;
   const verdict = canPlace(x, y);
-  const broke = state.cash < state.building.cost;
+  const broke = state.cash < ui.building.cost;
   const ok = verdict.ok && !broke;
-  state.ghost.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-  state.ghost.classList.toggle('bad', !ok);
-  state.ghost.classList.toggle('off', !state.mouseOn);
-  const reason = state.ghost.querySelector('.tw-ghost-reason');
+  ui.ghost.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+  ui.ghost.classList.toggle('bad', !ok);
+  ui.ghost.classList.toggle('off', !ui.mouseOn);
+  const reason = ui.ghost.querySelector('.tw-ghost-reason');
   if (reason) {
-    if (broke) reason.textContent = `NEED $${state.building.cost} SALVAGE`;
+    if (broke) reason.textContent = `NEED $${ui.building.cost} SALVAGE`;
     else if (verdict.ok && padAt(x, y)) reason.textContent = 'AA PAD — THIS UNIT CAN HIT FLYERS';
     else reason.textContent = verdict.reason;
   }
@@ -1594,7 +1602,7 @@ function placeTower(entry, x, y) {
   if (state.cash < entry.cost) { playSound('alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return false; }
   state.cash -= entry.cost;
   const node = towerNode(entry, x, y);
-  state.layers.towers.appendChild(node);
+  ui.layers.towers.appendChild(node);
   const tower = { id: entry.id, entry, x, y, node, head: node.querySelector('.tw-head'), cd: 0.35, boost: 1, lvl: 0 };
   if (entry.id === 'corpseblossom') { tower.veinCd = 0.6; tower.lust = 0; tower.screamCd = 0; }
   if (entry.id === 'gravewarden') { tower.bellCd = 2.5; tower.tollCharges = 0; tower.soulCd = 0; }
@@ -1912,11 +1920,11 @@ function launchWardenSoul(tower) {
   soul.fy = sy;
   g.setAttribute('transform', `translate(${sx.toFixed(1)} ${sy.toFixed(1)})`);
   const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: sx, cy: sy, r: 8 });
-  state.layers.fx.appendChild(bloom);
+  ui.layers.fx.appendChild(bloom);
   setTimeout(() => bloom.remove(), 720);
   g.classList.add('spawn-in');
   setTimeout(() => g.classList.remove('spawn-in'), 420);
-  state.layers.enemies.appendChild(g);
+  ui.layers.enemies.appendChild(g);
   state.enemies.push(soul);
   g.addEventListener('pointerenter', (event) => showSummonTip(soul, event));
   g.addEventListener('pointermove', moveTip);
@@ -2109,8 +2117,8 @@ function openTowerPanel(tower) {
   if (left + pw > window.innerWidth - margin) left = sx - pw - 26; // flip left near the right edge
   panel.style.left = `${Math.max(margin, Math.min(window.innerWidth - pw - margin, left))}px`;
   panel.style.top = `${Math.max(margin, Math.min(window.innerHeight - ph - margin, sy - 120))}px`;
-  state.towerPanel = panel;
-  state.panelTower = tower;
+  ui.towerPanel = panel;
+  ui.panelTower = tower;
   tower.node.classList.add('selected');
   panel.querySelectorAll('.tp-buy').forEach((button) => button.addEventListener('click', () => buyTrack(tower)));
   panel.querySelector('.tp-sell').addEventListener('click', () => sellTower(tower));
@@ -2132,9 +2140,9 @@ function openTowerPanel(tower) {
 }
 
 function closeTowerPanel() {
-  if (state.panelTower && state.panelTower.node) state.panelTower.node.classList.remove('selected');
-  if (state.towerPanel) { state.towerPanel.remove(); state.towerPanel = null; }
-  state.panelTower = null;
+  if (ui.panelTower && ui.panelTower.node) ui.panelTower.node.classList.remove('selected');
+  if (ui.towerPanel) { ui.towerPanel.remove(); ui.towerPanel = null; }
+  ui.panelTower = null;
 }
 
 function sellTower(tower) {
@@ -2157,7 +2165,7 @@ function sellTower(tower) {
 
 // --- Tower combat brain ------------------------------------------------------------------
 function updateTowers(dt) {
-  if (!state.layers || !state.towers.length) { paintNukeButton(); return; }
+  if (!ui.layers || !state.towers.length) { paintNukeButton(); return; }
   // Rally clock: RALLY CRY keeps the ring's fire rate flooded for its duration.
   for (const tower of state.towers) {
     tower.rallyT = Math.max(0, (tower.rallyT || 0) - dt);
@@ -2187,7 +2195,7 @@ function updateTowers(dt) {
             const target = pool[Math.floor(Math.random() * pool.length)];
             const [tx, ty] = posOf(target);
             const burst = svgNode('circle', { class: 'fx-ring fx-veins-burst', cx: tx, cy: ty, r: 6 });
-            state.layers.fx.appendChild(burst);
+            ui.layers.fx.appendChild(burst);
             setTimeout(() => burst.remove(), 620);
             fxRing(tx, ty, 'fx-ring-virus');
             for (const enemy of pool) {
@@ -2203,7 +2211,7 @@ function updateTowers(dt) {
       tower.droneCd = Math.max(0, (tower.droneCd || 0) - dt);
       if (tower.droneCd <= 0 && launchStrikeDrone(tower)) {
         tower.droneCd = effStats(tower).launchEvery || 6;
-        if (state.panelTower === tower) openTowerPanel(tower); // live launch countdown
+        if (ui.panelTower === tower) openTowerPanel(tower); // live launch countdown
       }
     }
     if (tower.id === 'gravewarden') {
@@ -2248,7 +2256,7 @@ function updateTowers(dt) {
           const prey = pool.reduce((best, enemy) => (enemy.dist > best.dist ? enemy : best));
           const [lx, ly] = posOf(prey);
           const shell = svgNode('circle', { class: 'fx-shell', r: 4, cx: tower.x, cy: tower.y });
-          state.layers.fx.appendChild(shell);
+          ui.layers.fx.appendChild(shell);
           state.projectiles.push({ kind: 'shell', x: tower.x, y: tower.y, tx: lx, ty: ly, speed: 240, dmg: es.lobDmg || 140, splash: es.lobSplash || 50, node: shell });
           fxRing(tower.x, tower.y, 'fx-ring-amber');
         }
@@ -2427,9 +2435,9 @@ function beginWarrantCharge(tower, target, es) {
   const [px, py] = posOf(target);
   lock.setAttribute('transform', `translate(${px.toFixed(1)} ${py.toFixed(1)})`);
   const line = svgNode('line', { class: 'fx-warrant-line', x1: tower.x, y1: tower.y, x2: px.toFixed(1), y2: py.toFixed(1) });
-  state.layers.fx.appendChild(line);
-  state.layers.fx.appendChild(ring);
-  state.layers.fx.appendChild(lock);
+  ui.layers.fx.appendChild(line);
+  ui.layers.fx.appendChild(ring);
+  ui.layers.fx.appendChild(lock);
   tower.charge = { nid: target.nid, x: px, y: py, t: es.warrantCd || 12, fx: { ring, lock, line } };
   tower.node.classList.add('tw-charging');
   floatText(tower.x, tower.y - 52, 'VERDICT LOCKED', 'core-float');
@@ -2514,7 +2522,7 @@ function formatCash(value) {
 function fireLine(tower, target, cls, width = 2) {
   const [ex, ey] = posOf(target);
   const line = svgNode('line', { class: `fx-line ${cls}`, x1: tower.x, y1: tower.y, x2: ex, y2: ey, 'stroke-width': width });
-  state.layers.fx.appendChild(line);
+  ui.layers.fx.appendChild(line);
   setTimeout(() => line.remove(), 300);
   return [ex, ey];
 }
@@ -2535,7 +2543,7 @@ function fireTower(tower, target) {
     }
     case 'lazermortar': {
       const shell = svgNode('circle', { class: 'fx-shell', r: 4, cx: tower.x, cy: tower.y });
-      state.layers.fx.appendChild(shell);
+      ui.layers.fx.appendChild(shell);
       state.projectiles.push({ kind: 'shell', x: tower.x, y: tower.y, tx, ty, speed: 260, dmg, splash: effStats(tower).splash || 30, node: shell });
       break;
     }
@@ -2554,7 +2562,7 @@ function fireTower(tower, target) {
         const px = tower.x + Math.cos(aim + off) * span;
         const py = tower.y + Math.sin(aim + off) * span;
         const pellet = svgNode('line', { class: 'fx-line fx-pellet', x1: tower.x, y1: tower.y, x2: px, y2: py, 'stroke-width': 2.5 });
-        state.layers.fx.appendChild(pellet);
+        ui.layers.fx.appendChild(pellet);
         setTimeout(() => pellet.remove(), 300);
       }
       fxRing(tx, ty, 'fx-ring-amber');
@@ -2607,7 +2615,7 @@ function fireTower(tower, target) {
       // MIRV tiers crack the shell into cluster bomblets on impact.
       const es = effStats(tower);
       const missile = svgNode('circle', { class: 'fx-shell fx-missile', r: 5, cx: tower.x, cy: tower.y });
-      state.layers.fx.appendChild(missile);
+      ui.layers.fx.appendChild(missile);
       state.projectiles.push({ kind: 'missile', x: tower.x, y: tower.y, tx, ty, speed: 210, dmg, splash: es.splash || 55, cluster: es.cluster || 0, node: missile });
       fxRing(tower.x, tower.y, 'fx-ring-amber');
       break;
@@ -2624,7 +2632,7 @@ function fireTower(tower, target) {
         fxRing(tx, ty, 'fx-ring-virus');
       }
       const slash = svgNode('line', { class: 'fx-line fx-tracer fx-slash', x1: tower.x, y1: tower.y, x2: tx, y2: ty, 'stroke-width': 3 });
-      state.layers.fx.appendChild(slash);
+      ui.layers.fx.appendChild(slash);
       setTimeout(() => slash.remove(), 160);
       fxRing(tx, ty, 'fx-ring-virus');
       fragBurst(tower, target, dmg);
@@ -2685,7 +2693,7 @@ function fireTower(tower, target) {
           const px = tower.x + Math.cos(aim + off) * span;
           const py = tower.y + Math.sin(aim + off) * span;
           const pellet = svgNode('line', { class: 'fx-line fx-pellet', x1: tower.x, y1: tower.y, x2: px, y2: py, 'stroke-width': 2.5 });
-          state.layers.fx.appendChild(pellet);
+          ui.layers.fx.appendChild(pellet);
           setTimeout(() => pellet.remove(), 300);
         }
         fxRing(tx, ty, 'fx-ring-amber');
@@ -2718,7 +2726,7 @@ function fireTower(tower, target) {
 }
 
 function updateProjectiles(dt) {
-  if (!state.layers) return;
+  if (!ui.layers) return;
   for (const p of state.projectiles) {
     if (p.kind === 'shell' || p.kind === 'missile') {
       const dx = p.tx - p.x;
@@ -2768,33 +2776,33 @@ function distToSegment(px, py, x1, y1, x2, y2) {
 // --- Board plumbing: pointer tracking, deploy clicks, cancel gestures --------------------
 board.addEventListener('pointermove', (event) => {
   const [x, y] = boardPoint(event);
-  state.mouseX = x;
-  state.mouseY = y;
-  state.mouseOn = true;
-  if (state.crosshair) state.crosshair.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-  if (state.building) paintGhost(x, y);
+  ui.mouseX = x;
+  ui.mouseY = y;
+  ui.mouseOn = true;
+  if (ui.crosshair) ui.crosshair.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+  if (ui.building) paintGhost(x, y);
 });
 
 board.addEventListener('pointerleave', () => {
-  state.mouseOn = false;
-  if (state.ghost) state.ghost.classList.add('off');
+  ui.mouseOn = false;
+  if (ui.ghost) ui.ghost.classList.add('off');
 });
 
 board.addEventListener('click', (event) => {
-  if (!state.bar || !buildingAllowed()) return;
+  if (!ui.bar || !buildingAllowed()) return;
   const [x, y] = boardPoint(event);
-  if (state.nukeAim) { fireNuke(x, y); return; }
-  if (state.building) {
+  if (ui.nukeAim) { fireNuke(x, y); return; }
+  if (ui.building) {
     const verdict = canPlace(x, y);
     if (!verdict.ok) { rejectPlace(x, y, verdict.reason); return; }
     if (coopGuest()) {
-      coopIntent({ a: 'place', id: state.building.id, x, y });
+      coopIntent({ a: 'place', id: ui.building.id, x, y });
       floatText(x, y - 20, 'SYNC → SQUAD LEAD', 'sync-float');
       setBuilding(null);
       return;
     }
-    if (state.cash < state.building.cost) { rejectPlace(x, y, `NEED $${state.building.cost} SALVAGE`); return; }
-    placeTower(state.building, x, y);
+    if (state.cash < ui.building.cost) { rejectPlace(x, y, `NEED $${ui.building.cost} SALVAGE`); return; }
+    placeTower(ui.building, x, y);
     return;
   }
   const node = event.target.closest ? event.target.closest('.tower') : null;
@@ -2806,16 +2814,16 @@ board.addEventListener('click', (event) => {
 
 board.addEventListener('contextmenu', (event) => {
   event.preventDefault();
-  if (state.building) setBuilding(null);
+  if (ui.building) setBuilding(null);
   else closeTowerPanel();
 });
 
 document.addEventListener('keydown', (event) => {
   if (document.querySelector('#battlefield').hidden) return;
-  if (event.key === 'Escape') { setBuilding(null); closeTowerPanel(); if (state.nukeAim) setNukeAim(false); return; }
+  if (event.key === 'Escape') { setBuilding(null); closeTowerPanel(); if (ui.nukeAim) setNukeAim(false); return; }
   const digit = Number(event.key);
-  if (digit >= 1 && digit <= 5 && state.bar && buildingAllowed()) {
-    const slots = state.bar.querySelectorAll('.lo-slot[data-tower]');
+  if (digit >= 1 && digit <= 5 && ui.bar && buildingAllowed()) {
+    const slots = ui.bar.querySelectorAll('.lo-slot[data-tower]');
     const slot = slots[digit - 1];
     if (slot) toggleBuild(slot.dataset.tower);
   }
@@ -2900,7 +2908,7 @@ function coopApplySync(snap) {
       const entry = CBZShop.TOWERS.find((item) => item.id === id);
       if (!entry) continue;
       const node = towerNode(entry, x, y);
-      state.layers.towers.appendChild(node);
+      ui.layers.towers.appendChild(node);
       tower = { id, entry, x, y, node, head: node.querySelector('.tw-head'), cd: 0, boost: 1, lvl, gid, onPad: Boolean(pad), guest: true };
       state.towers.push(tower);
       node.classList.add('placed');
@@ -2933,7 +2941,7 @@ function coopApplySync(snap) {
       g.appendChild(fill);
       const shieldFill = svgNode('rect', { class: 'shield-fill', x: -barW / 2, y: barY - 4, width: 0, height: 2.4 });
       g.appendChild(shieldFill);
-      state.layers.enemies.appendChild(g);
+      ui.layers.enemies.appendChild(g);
       enemy = { key, t, node: g, fill, shieldFill, hp, maxHp, shield, maxShield: t.shield || 0, alive: true, gx: x, gy: y, fx: x, fy: y, angle: 0, guest: true, guestNid: nid, friendly: Boolean(friendly) };
       state.guestMap.set(nid, enemy);
       g.classList.add('spawn-in');
