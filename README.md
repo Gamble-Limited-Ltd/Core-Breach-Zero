@@ -17,5 +17,5 @@ npm test    # every suite, each on its own throwaway server + accounts file
 
 ## Credits
 
-Core Breach: Zero is made by Loomis and hosted by [Gamble Limited Ltd](https://hall.taps-holdings.org) (HALL).
+Game created and owned by Jackson Loomis. Hosted and assisted by [Gamble Limited Ltd](https://hall.taps-holdings.org) (HALL).
 The author keeps the copyright. See `LICENSE` and `NOTICE`. Play rules are in `terms.html` (draft).

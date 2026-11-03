@@ -3,7 +3,7 @@
 Rules for every agent and human working on Core Breach: Zero. Read this first, every session. If something here is wrong, fix it in the same commit.
 
 ## The project
-- Browser tower defense game by Loomis (`jacksonloomis-commits`), who owns it. Gamble Limited Ltd (GLL, James `TheGeneral4757`) hosts it and helps with hosting, tests, CI, docs and security.
+- Browser tower defense game created and owned by Jackson Loomis (`jacksonloomis-commits`), who owns it. Gamble Limited Ltd (GLL, James `TheGeneral4757`) hosts it and helps with hosting, tests, CI, docs and security.
 - Stack: plain browser JavaScript, no build step. Node server (`server.js`) with `ws` for rooms. Accounts live in `accounts.json` (not in git).
 - License: PolyForm Noncommercial 1.0.0 (`LICENSE`). The author keeps the copyright (`NOTICE`). Play money only: no real-money features, no ads.
 
@@ -33,3 +33,4 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 ## Working together
 - GLL may open issues and PRs on GitHub. The author replies there.
 - Found a bug? Open an issue and say what you saw and how to repeat it.
+- Credit line (home footer, login card, About menu, README, Terms): "Game created and owned by Jackson Loomis. Hosted and assisted by Gamble Limited Ltd." Keep it readable, never on in-match screens or near the main logo.

@@ -312,6 +312,11 @@ const menus = {
     description: 'Every deployment to the Core Breach grid, newest first. The grid keeps receipts.',
     stats: [['ENTRIES', `${UPDATE_LOG.length}`], ['LATEST', UPDATE_LOG[0].version], ['BUILD', BUILD]],
   },
+  about: {
+    tag: 'CREDITS', title: 'ABOUT & CREDITS',
+    description: 'Game created and owned by Jackson Loomis. Hosted and assisted by Gamble Limited Ltd.',
+    stats: [['CREATED BY', 'JACKSON LOOMIS'], ['HOSTED BY', 'GAMBLE LIMITED LTD'], ['LICENSE', 'POLYFORM NONCOMMERCIAL 1.0.0']],
+  },
 };
 
 function playSound(kind = 'click') {
