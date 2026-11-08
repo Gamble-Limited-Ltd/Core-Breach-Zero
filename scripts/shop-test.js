@@ -28,8 +28,8 @@ async function api(path, payload) {
   const phase = process.argv[2] || '1';
   const home = await fetch(`${BASE}/`);
   check('homepage 200', home.status === 200);
-  const shopjs = await fetch(`${BASE}/shop.js`);
-  check('shop.js served 200', shopjs.status === 200);
+  const shopjs = await fetch(`${BASE}/src/shop/ui.js`);
+  check('shop UI module served 200', shopjs.status === 200);
   const decal = await fetch(`${BASE}/assets/towers/sentinel.webp`);
   check('tower decal asset served', decal.ok);
   const sgdecal = await fetch(`${BASE}/assets/towers/shotgunner.webp`);

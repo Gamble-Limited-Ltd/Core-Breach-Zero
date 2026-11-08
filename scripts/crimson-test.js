@@ -27,7 +27,7 @@ function extractLiteral(src, name) {
 }
 
 console.log('--- Crimson clock (app.js) ---');
-const appjs = read('app.js');
+const appjs = ['src/app/update-log.js', 'app.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js'].map(read).join('\n');
 check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
 check('deadline is a fixed UTC instant (static-host safe)', appjs.includes("Date.parse('2026-10-30T18:00:00Z')"));
 check('192h gate: window is 7 days after unlock', appjs.includes("Date.parse('2026-11-06T18:00:00Z')"));
@@ -44,7 +44,7 @@ check('buildBoard paints the crimson decor + theme hook', appjs.includes("board.
 check('openBattlefield accepts a map object for the event map', appjs.includes("typeof mapId === 'object' && mapId ? mapId : BATTLE_MAPS[mapId]"));
 
 console.log('--- Crimson protocol (combat.js) ---');
-const combat = read('combat.js');
+const combat = [read('combat.js'), read('src/combat/data.js')].join('\n');
 const CRIMSON_WAVES = extractLiteral(combat, 'CRIMSON_WAVES');
 const ENEMY_TYPES = extractLiteral(combat, 'ENEMY_TYPES');
 const SURGE_MODS = extractLiteral(combat, 'SURGE_MODS');
@@ -88,8 +88,8 @@ check('LOCAL grants relic on crimson win', grantRe.test(appjs));
 check('relic flag returned in both payloads', (serverjs.match(/relic, levelsGained/g) || []).length === 1 && (appjs.match(/relic, levelsGained/g) || []).length === 1);
 check('dawnbreaker NOT in LOCAL shop mirror (unpurchasable)', !/dawnbreaker: \{ name: 'DAWNBRINGER'/.test(appjs));
 
-console.log('--- Shop relic card (shop.js) ---');
-const shopjs = read('shop.js');
+console.log('--- Shop relic card (src/shop/data.js) ---');
+const shopjs = read('src/shop/data.js') + read('src/shop/ui.js');
 check('DAWNBRINGER blueprint registered as event relic', shopjs.includes("id: 'dawnbreaker'") && shopjs.includes('event: true'));
 check('event-locked visibility gate (never buyable)', shopjs.includes("if (entry.event) return 'event-locked';"));
 check('event-locked card renders SLAY THE CRIMSON DAWN lock', shopjs.includes('SLAY THE CRIMSON DAWN'));
@@ -152,8 +152,8 @@ check('UPDATE LOG leads with FLIGHT CORRIDOR entry', appjs.indexOf("version: '20
 check('update log covers drone nerf + corridor pads + intel readout', ['1 core damage per leak', 'Two AA pads laid directly under the drone approach lines', 'protocol-adjusted CORE DMG'].every((s) => appjs.includes(s)));
 
 console.log('--- Syntax gates ---');
-for (const f of ['app.js', 'combat.js', 'server.js', 'shop.js']) {
-  try { require('child_process').execSync(`node --check ${path.join(ROOT, f)}`, { stdio: 'pipe' }); check(`${f} parses clean`, true); }
+for (const f of ['app.js', 'combat.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js']) {
+  try { require('child_process').execSync((f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
 

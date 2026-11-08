@@ -9,10 +9,12 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 
 ## File map
 - `index.html`, `styles.css`: the page and styling.
-- `app.js`: menus, accounts, rooms, offline LOCAL mode.
-- `combat.js`: the in-match game.
-- `shop.js`: the Nexus Shop UI (economy is mirrored in `server.js`: keep them in sync).
+- `app.js`: menus, accounts, rooms, offline LOCAL mode. It is an ES module now; data moved to `src/app/update-log.js` (BUILD + UPDATE_LOG), `src/app/progression.js` (salvage codes, achievements, perks) and `src/app/maps.js` (battle maps). Golden-seal math lives once, in `src/shop/data.js`. `combat.js` and `src/shop/ui.js` still read some `app.js` names as globals: the bridge is the `Object.assign(window, ...)` block at the end of `app.js`. Add a name there when a classic script needs it.
+- `combat.js`: the in-match game (an ES module wrapping one IIFE; the logic is still one big closure). `src/combat/data.js`: enemy roster, wave ladders per protocol, mode curves, foundry and tower rules, nuke constants (pure data).
+- `src/shop/data.js`: shop data (tower catalog, categories, ULTIMATUM cards, XP curve), pure, no DOM. `src/shop/ui.js`: the Nexus Shop screen (ES module, still sets `window.CBZShop`). The economy is mirrored in `server.js`: keep them in sync.
+- Code split in progress: new code goes in ES modules under `src/` (native `import`/`export`, no bundler). `combat.js` still holds the simulation and its DOM code together. `/src/` is served with revalidation, so imports need no `?v=`.
 - `server.js`: static files (ETag, gzip, Cache-Control: `?v=` assets are immutable, html revalidates, art caches a day), account/shop/room API, WebSocket rooms.
+- `scripts/golden-run.js`: determinism harness for the combat sim (seeded RNG, fake clock, 3600 frames, compared with `scripts/golden/solo-easy.json`). Dev tool, needs Playwright (see header); run it before and after any change to sim code. Update the golden only for an intended balance change (`--update`).
 - `scripts/`: tests (`*-test.js`), `run-tests.js` (what `npm test` runs), `qa-*.sh` browser QA.
 - `terms.html`: draft Terms of Service.
 
@@ -29,7 +31,7 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - Keep the glowing home-screen menus and their look.
 - Keep `README.md`, `AGENTS.md` and `CLAUDE.md` current in the same commit as the change.
 - Tower art is 512px WebP in `assets/towers/`; keep new art at that size and format.
-- Bump the `?v=` cache-bust string in `index.html` when you change `app.js`, `combat.js`, `shop.js` or `styles.css`.
+- Bump the `?v=` cache-bust string in `index.html` when you change `app.js`, `combat.js`, `src/shop/ui.js` or `styles.css`.
 
 ## Working together
 - GLL may open issues and PRs on GitHub. The author replies there.

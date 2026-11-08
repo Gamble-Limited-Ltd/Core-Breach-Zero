@@ -36,8 +36,8 @@ function extractLiteral(src, name, extraBindings = {}) {
   return undefined;
 }
 
-console.log('--- Blueprint catalog (shop.js) ---');
-const shopjs = read('shop.js');
+console.log('--- Blueprint catalog (src/shop/data.js) ---');
+const shopjs = read('src/shop/data.js') + read('src/shop/ui.js');
 const TOWERS = extractLiteral(shopjs, 'TOWERS', { ic: (inner) => inner });
 const silo = TOWERS && TOWERS.find((t) => t.id === 'missilesilo');
 const drone = TOWERS && TOWERS.find((t) => t.id === 'dronespawner');
@@ -54,7 +54,7 @@ check('DRONE SPAWNER has decal art', drone && drone.art === 'assets/towers/drone
 check('shop card renders a DRONE meter for the carrier', shopjs.includes("entry.stats.drone ? `<div class=\"tc-meter\"><span>DRONE</span>"));
 check('shop card renders a CONTAGION meter for the virus', shopjs.includes("entry.stats.corrupt ? `<div class=\"tc-meter\"><span>CONTAGION</span>"));
 
-console.log('--- SCRAP PROTOCOL balance pass (shop.js) ---');
+console.log('--- SCRAP PROTOCOL balance pass (src/shop/data.js) ---');
 const se = TOWERS.find((t) => t.id === 'sentinel');
 const vi = TOWERS.find((t) => t.id === 'virus');
 const sh = TOWERS.find((t) => t.id === 'shredder');
@@ -74,7 +74,7 @@ check('SHREDDER is the early-wave specialist: 11 dmg / 3 rate / 105 rng', sh && 
 check('SHREDDER ladder tops out on purpose (3 small tiers, cap 18 dmg)', sh && sh.track.length === 3 && sh.track[2].sets.dmg === 18 && sh.track[2].sets.rng === 115);
 check('SHREDDER has decal art', sh && sh.art === 'assets/towers/shredder.webp' && fs.existsSync(path.join(ROOT, 'assets/towers/shredder.webp')));
 
-console.log('--- Nerfs: Shotgunner + Sniper (shop.js) ---');
+console.log('--- Nerfs: Shotgunner + Sniper (src/shop/data.js) ---');
 check('SHOTGUNNER trimmed: 27 dmg / 12U base burst ring', sg.stats.dmg === 27 && sg.stats.splash === 12);
 check('SHOTGUNNER ladder trimmed (splash 20/24, dmg 36/40)', sg.track[1].sets.splash === 20 && sg.track[2].sets.splash === 24 && sg.track[2].sets.dmg === 36 && sg.track[3].sets.dmg === 40);
 check('SNIPER trimmed: 130 dmg base', sn.stats.dmg === 130);
@@ -82,7 +82,7 @@ check('SNIPER rail trimmed (150 / 215 / 330)', sn.track[1].sets.dmg === 150 && s
 check('sniper rng + targeting untouched by the nerf', sn.track[0].sets.targeting === 'maxhp' && sn.track[4].sets.rng === 350 && sn.track[4].sets.rate === 0.4);
 
 console.log('--- Combat wiring (combat.js) ---');
-const combat = read('combat.js');
+const combat = [read('combat.js'), read('src/combat/data.js')].join('\n');
 check('MISSILE SILO tracks air natively (no pad needed)', combat.includes("missilesilo: { air: 'yes' }"));
 check('SHREDDER is ground-only with pad AA', combat.includes("shredder: { air: 'no' }"));
 check('SHREDDER spits a chip-stream (fx-chip tracer)', combat.includes("case 'shredder':") && combat.includes("fireLine(tower, target, 'fx-chip'"));
@@ -120,7 +120,7 @@ for (const wave of HARD_WAVES) for (const [key, count] of wave.groups) {
 check('escalated HARD ladder still validates (keys + mods + counts)', badKeys.size === 0, [...badKeys].join(','));
 
 console.log('--- Shop mirrors (LOCAL + server) ---');
-const appjs = read('app.js');
+const appjs = ['src/app/update-log.js', 'app.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js'].map(read).join('\n');
 const serverjs = read('server.js');
 const localShop = extractLiteral(appjs, 'SHOP');
 const serverShop = extractLiteral(serverjs, 'SHOP');
@@ -157,7 +157,7 @@ check('event debrief omits the retry button entirely', combat.includes("const ev
 check('non-event debrief keeps RE-DEPLOY / RETRY', combat.includes("${win ? 'RE-DEPLOY' : 'RETRY'}"));
 check('event debrief keeps RETURN TO BAY as the exit', combat.includes("<button class=\"inline-button\" id=\"end-bay\" type=\"button\">RETURN TO BAY</button>"));
 
-console.log('--- ULTIMATUM: uncapped clearance + core vault (shop.js/app.js/server.js) ---');
+console.log('--- ULTIMATUM: uncapped clearance + core vault (src/shop/*, app.js/server.js) ---');
 const indexhtml = read('index.html');
 const styles = read('styles.css');
 check('level cap is gone everywhere (app/server/shop)', !appjs.includes('MAX_LEVEL') && !serverjs.includes('MAX_LEVEL') && !shopjs.includes('MAX_LEVEL'));
@@ -179,7 +179,7 @@ check('vault tab + panel + exchange wired in the shop', shopjs.includes('shop-ta
 check('exchange button labels the 50k milestone dynamically', shopjs.includes('EXCHANGE ${format(ULT_XP_PER_CORE)} XP // BANK ') && shopjs.includes('REACH ${format(ULT_XP_PER_CORE)} TOTAL XP TO BANK A CORE'));
 check('TOTAL XP counter lives in the shop wallet', shopjs.includes('TOTAL XP // LIFETIME') && shopjs.includes('id="shop-totalxp"'));
 check('vault card renders blossom art + arm/buy actions', shopjs.includes('data-ult-buy="${card.id}"') && shopjs.includes("ULTIMATUM CARD ACQUIRED"));
-check('client one-card guard + setProfile heal in shop.js', shopjs.includes('ONLY ONE ULTIMATUM CARD CAN BE ARMED') && shopjs.includes('let ultSeen = false;'));
+check('client one-card guard + setProfile heal in src/shop', shopjs.includes('ONLY ONE ULTIMATUM CARD CAN BE ARMED') && shopjs.includes('let ultSeen = false;'));
 check('blueprint grid excludes ULTIMATUM cards', shopjs.includes('!entry.ultimatum && (filter'));
 check('ultimatum vault styled (gold hero + card + exchange)', styles.includes('.ult-hero') && styles.includes('.ult-card') && styles.includes('.ult-exchange.ready') && styles.includes('.tok-ult'));
 
@@ -346,7 +346,7 @@ check('warrant FX styled (growing ring + lock pulse + layered beam)', styles.inc
 const paragon = TOWERS.find((t) => t.id === 'paragon');
 check('PARAGON: golden trophy rig, never sold, GOLDEN TITHE aura', paragon && paragon.golden === true && paragon.price === 0 && paragon.stats.tithe === 0.15 && paragon.track[4].sets.tithe === 0.2 && paragon.limit === 1);
 check('golden tithe pays out in killEnemy', combat.includes('const payout = Math.round(enemy.t.bounty * skim * paragonTithe(x, y));') && combat.includes('function paragonTithe(x, y)'));
-check('golden seal math mirrored in three places (server + app + shop)', serverjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && appjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && shopjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];"));
+check('golden seal math mirrored in two places (server + shop data); app.js imports it', serverjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && shopjs.includes("const GOLDEN_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && appjs.includes("mapSeal, allSeals } from './src/shop/data.js'"));
 check('gilding bounty 2,500 NC + 10 BT on both reward paths', serverjs.includes('const GOLDEN_REWARD = { nc: 2500, bt: 10 };') && appjs.includes('const GOLDEN_REWARD = { nc: 2500, bt: 10 };'));
 check('mission-complete grants golden seals (server + LOCAL)', serverjs.includes('if (golden.length) rewards.golden = golden;') && appjs.includes('if (golden.length) rewards.golden = golden;'));
 check('paragon materializes on the fifth seal (sanitize + mission grant)', serverjs.includes("if (allSeals(meta.mapWins) && !meta.owned.includes('paragon')) meta.owned.push('paragon');") && appjs.includes("if (allSeals(meta.mapWins) && !meta.owned.includes('paragon')) meta.owned.push('paragon');") && appjs.includes("rewards.paragon = true;") && serverjs.includes("rewards.paragon = true;"));
@@ -390,8 +390,8 @@ check('old hardcoded admin code is gone from app + server', !appjs.includes('ADM
 check('ADMIN_KEY_CODE env gates the admin code on the server', serverjs.includes('process.env.ADMIN_KEY_CODE') && serverjs.includes('ADMIN_KEY_CODE.length >= 8'));
 
 console.log('--- Syntax gates ---');
-for (const f of ['combat.js', 'app.js', 'server.js', 'shop.js']) {
-  try { require('child_process').execSync(`node --check ${path.join(ROOT, f)}`, { stdio: 'pipe' }); check(`${f} parses clean`, true); }
+for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js']) {
+  try { require('child_process').execSync((f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
 
