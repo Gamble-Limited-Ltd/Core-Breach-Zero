@@ -2,6 +2,7 @@
 // Loaded after app.js: uses its globals (BATTLE_MAPS, svgNode, playSound, showToast...).
 // Mode voting (EASY + MEDIUM) + per-protocol wave ladders + enemies that follow every map's tracks and mechanics.
 import { rand } from './src/sim/rng.js';
+import { buildSampler } from './src/sim/track.js';
 import { BASE_MAX, BLOAT_EMP_RADIUS, BLOAT_EMP_SECONDS, CORE_CLEAR, EASY_BOSS_RELIEF, EASY_WAVES, ENEMY_TYPES, FOOT_HALF, MODE_BOSS_LEAK, MODE_HP_GROWTH, MODE_HP_SCALE, MODE_LEAK, MODE_SPEED, NUKE_COOLDOWN, NUKE_COST, NUKE_DAMAGE, NUKE_RADIUS, PAD_AIR_BOOST, PAD_SNAP, SEP, SPAWN_GAP, START_SALVAGE, SUMMON_CAP, SURGE_MODS, TOWER_BASE, TOWER_PER_ALLY, TOWER_RULES, TRACK_CLEAR, VETERAN_GUNS, WASTE_DPS, WASTE_RADIUS, WASTE_SECONDS, WAVES, WAVE_HP_SCALE } from './src/combat/data.js';
 (() => {
 const board = document.querySelector('#board');
@@ -79,20 +80,8 @@ const debugWave = Number(new URLSearchParams(location.search).get('cbzwave') || 
 const debugCash = Number(new URLSearchParams(location.search).get('cash') || 0);
 const debugFreeze = new URLSearchParams(location.search).has('freeze');
 
-// --- Track engine: sample every SVG path once, then move by arc length -------------
-function buildSamplers(map) {
-  return map.paths.map((d) => {
-    const el = svgNode('path', { d });
-    const len = el.getTotalLength();
-    const step = 2;
-    const pts = [];
-    for (let l = 0; l <= len; l += step) {
-      const p = el.getPointAtLength(l);
-      pts.push([p.x, p.y]);
-    }
-    return { pts, len, step, at(dist) { return pts[Math.min(pts.length - 1, Math.max(0, Math.round(dist / step)))]; } };
-  });
-}
+// --- Track engine: sample every map path once (src/sim/track.js, no DOM), then move by arc length ---
+function buildSamplers(map) { return map.paths.map(buildSampler); }
 
 function nearestDist(sampler, x, y) {
   let best = 0;
