@@ -45,12 +45,12 @@ check('MISSILE SILO registered at Clearance 30 (endgame capstone)', silo && silo
 check('MISSILE SILO is a mixed-currency capstone (9000 NC + 120 BT / 650 salvage)', silo && silo.price.nc === 9000 && silo.price.bt === 120 && silo.cost === 650);
 check('MISSILE SILO base: 300 dmg / 0.22 rate / 300 rng / 55 splash', silo && silo.stats.dmg === 300 && silo.stats.rate === 0.22 && silo.stats.rng === 300 && silo.stats.splash === 55);
 check('MISSILE SILO has 4-tier ladder ending in MIRV PROTOCOL', silo && silo.track.length === 4 && silo.track[3].label === 'MIRV PROTOCOL' && silo.track[3].sets.cluster === 1 && silo.track[3].sets.dmg === 650);
-check('MISSILE SILO has decal art', silo && silo.art === 'assets/towers/missilesilo.png' && fs.existsSync(path.join(ROOT, 'assets/towers/missilesilo.png')));
+check('MISSILE SILO has decal art', silo && silo.art === 'assets/towers/missilesilo.webp' && fs.existsSync(path.join(ROOT, 'assets/towers/missilesilo.webp')));
 check('DRONE SPAWNER registered at Clearance 20', drone && drone.unlock === 20, JSON.stringify(drone && drone.unlock));
 check('DRONE SPAWNER is one-per-commander (5200 NC + 85 BT / 475 salvage)', drone && drone.limit === 1 && drone.price.nc === 5200 && drone.price.bt === 85 && drone.cost === 475);
 check('DRONE SPAWNER base: 90 dmg/hull drone every 5s in a 190 ring (FIELD AUDIT re-arm)', drone && drone.stats.drone === 90 && drone.stats.launchEvery === 5 && drone.stats.rng === 190);
 check('DRONE SPAWNER apex tier: 300-damage drones every 2.6s at 230 rng', drone && drone.track[3].label === 'APEX CARRIER' && drone.track[3].sets.drone === 300 && drone.track[3].sets.launchEvery === 2.6 && drone.track[3].sets.rng === 230);
-check('DRONE SPAWNER has decal art', drone && drone.art === 'assets/towers/dronespawner.png' && fs.existsSync(path.join(ROOT, 'assets/towers/dronespawner.png')));
+check('DRONE SPAWNER has decal art', drone && drone.art === 'assets/towers/dronespawner.webp' && fs.existsSync(path.join(ROOT, 'assets/towers/dronespawner.webp')));
 check('shop card renders a DRONE meter for the carrier', shopjs.includes("entry.stats.drone ? `<div class=\"tc-meter\"><span>DRONE</span>"));
 check('shop card renders a CONTAGION meter for the virus', shopjs.includes("entry.stats.corrupt ? `<div class=\"tc-meter\"><span>CONTAGION</span>"));
 
@@ -72,7 +72,7 @@ check('SNIPER rail trimmed (150 / 215 / 330)', sn.track[1].sets.dmg === 150 && s
 check('SHREDDER decrypts at Clearance 20 (2200 NC + 35 BT / 90 salvage)', sh && sh.unlock === 20 && sh.price.nc === 2200 && sh.price.bt === 35 && sh.cost === 90);
 check('SHREDDER is the early-wave specialist: 11 dmg / 3 rate / 105 rng', sh && sh.stats.dmg === 11 && sh.stats.rate === 3 && sh.stats.rng === 105);
 check('SHREDDER ladder tops out on purpose (3 small tiers, cap 18 dmg)', sh && sh.track.length === 3 && sh.track[2].sets.dmg === 18 && sh.track[2].sets.rng === 115);
-check('SHREDDER has decal art', sh && sh.art === 'assets/towers/shredder.png' && fs.existsSync(path.join(ROOT, 'assets/towers/shredder.png')));
+check('SHREDDER has decal art', sh && sh.art === 'assets/towers/shredder.webp' && fs.existsSync(path.join(ROOT, 'assets/towers/shredder.webp')));
 
 console.log('--- Nerfs: Shotgunner + Sniper (shop.js) ---');
 check('SHOTGUNNER trimmed: 27 dmg / 12U base burst ring', sg.stats.dmg === 27 && sg.stats.splash === 12);
@@ -184,13 +184,13 @@ check('blueprint grid excludes ULTIMATUM cards', shopjs.includes('!entry.ultimat
 check('ultimatum vault styled (gold hero + card + exchange)', styles.includes('.ult-hero') && styles.includes('.ult-card') && styles.includes('.ult-exchange.ready') && styles.includes('.tok-ult'));
 
 console.log('--- Deploy chain: update log, build, cache-bust ---');
-check('BUILD bumped to 2026.11.05', appjs.includes("const BUILD = '2026.11.05';"));
+check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
 check('UPDATE LOG leads with ULTIMATUM entry', appjs.indexOf("version: '2026.10.28', tag: 'ULTIMATUM'") < appjs.indexOf("version: '2026.10.27'") && appjs.indexOf('FULL CLEARANCE') < appjs.indexOf('SCRAP PROTOCOL'));
 check('update log covers cap removal + vault + blossom card + migration', ['clearance cap is GONE', 'ULTIMATUM system goes live', 'first ULTIMATUM card', 'backfilled from their clearance history'].every((s) => appjs.includes(s)));
 check('update log covers sentinel buff + shredder + sniper nerf #3 + virus rework', ['SENTINEL TURRET buffed', 'SHREDDER decrypts at Clearance 20', 'SNIPER tuned down again', 'VIRUS reworked', 'MISSILE SILO'].every((s) => appjs.includes(s)));
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261024l', busts.length === 6 && busts.every((v) => v === '?v=20261024l'), busts.join(' '));
-check('shell footer brands GLL FOUNDATIONS', indexhtml.includes('BUILD 2026.11.05 // GLL FOUNDATIONS') && indexhtml.includes('THE CRIMSON WELL IS OPEN') && indexhtml.includes('ULTIMATUM VAULT OPEN'));
+check('all 6 index.html assets cache-busted to 20261024n', busts.length === 6 && busts.every((v) => v === '?v=20261024n'), busts.join(' '));
+check('shell footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP') && indexhtml.includes('THE CRIMSON WELL IS OPEN') && indexhtml.includes('ULTIMATUM VAULT OPEN'));
 check('play menu copy updated to 15% hostiles', appjs.includes('compounding hulls, 15% faster hostiles'));
 check('fx-missile warhead styled (orange glow)', styles.includes('.fx-missile') && /fx-missile[^}]*#ff7a45/.test(styles));
 check('fx-chip stream styled for the Shredder', styles.includes('.fx-chip'));
@@ -212,7 +212,7 @@ check('insane pays 350 NC / 400 XP per win, mirrored exactly', INSANE_REWARDS_LO
 check('room protocols carry insane (LOCAL + server sync)', appjs.includes("const ROOM_PROTOCOLS = ['easy', 'medium', 'hard', 'insane'];") && serverjs.includes("const PROTOCOL_CHOICES = ['easy', 'medium', 'hard', 'insane'];"));
 check('play menu copy names the spiral', appjs.includes('INSANE (30 waves on the spiral'));
 check('OPEN ROSTER: EXECUTIONER sold in the grid (no ULT flag), warden stays apex', TOWERS && TOWERS.some((t) => t.id === 'gravewarden' && t.ultimatum === true && t.limit === 1 && t.cost === 400 && t.track.length === 6) && TOWERS.some((t) => t.id === 'executioner' && !t.ultimatum && t.limit === 3 && t.unlock === 50 && t.price && t.price.nc === 12000 && t.price.bt === 150 && t.track.length === 5));
-check('apex decals shipped + dawnbreaker decal', fs.existsSync(path.join(ROOT, 'assets/towers/gravewarden.png')) && fs.existsSync(path.join(ROOT, 'assets/towers/executioner.png')) && fs.existsSync(path.join(ROOT, 'assets/towers/dawnbreaker.png')) && shopjs.includes("art: 'assets/towers/dawnbreaker.png'"));
+check('apex decals shipped + dawnbreaker decal', fs.existsSync(path.join(ROOT, 'assets/towers/gravewarden.webp')) && fs.existsSync(path.join(ROOT, 'assets/towers/executioner.webp')) && fs.existsSync(path.join(ROOT, 'assets/towers/dawnbreaker.webp')) && shopjs.includes("art: 'assets/towers/dawnbreaker.webp'"));
 check('shop ULT_CARDS: vault trio — blossom 2 cores / warden 1 core / warrant 3 cores, headsman gone', /const ULT_CARDS = \[[\s\S]*?corpseblossom[\s\S]*?cores: 2[\s\S]*?gravewarden[\s\S]*?cores: 1[\s\S]*?deathwarrant[\s\S]*?cores: 3[\s\S]*?\];/.test(shopjs) && !shopjs.includes("id: 'executioner', name: 'EXECUTIONER', cores"));
 check('free-claim rendering retired with the headsman', !shopjs.includes('CLAIM // FREE AT CLEARANCE') && !shopjs.includes('card.cores === 0'));
 check('ULT one-card set grows to the vault trio (server + LOCAL)', serverjs.includes("new Set(['corpseblossom', 'gravewarden', 'deathwarrant'])") && appjs.includes("new Set(['corpseblossom', 'gravewarden', 'deathwarrant'])"));
@@ -276,7 +276,7 @@ check('FLAK POST filler registered (L10, 1400+20, flyers-only)', flak && flak.un
 check('TAR SPRAYER filler registered (L12, 1750+25, no damage, slow 15%)', tar && tar.unlock === 12 && tar.price.nc === 1750 && tar.price.bt === 25 && tar.stats.dmg === 0 && tar.stats.slow === 0.15);
 check('COMMAND RELAY support rig registered (L18, 4300+70, limit 1, +10% dmg aura)', relay && relay.unlock === 18 && relay.limit === 1 && relay.stats.dmgBuff === 0.1 && relay.track.length === 5);
 check('RALLY CRY is the relay capstone ($600 cast / 45s cd / +50% for 6s)', relay && relay.track[4].label === 'RALLY CRY' && relay.track[4].sets.rallyCost === 600 && relay.track[4].sets.rallyCd === 45);
-check('filler + relay decals shipped and wired', ['sparkcoil', 'flakpost', 'tarsprayer', 'relay'].every((id) => { const e = TOWERS.find((t) => t.id === id); return e && e.art === `assets/towers/${id}.png` && fs.existsSync(path.join(ROOT, `assets/towers/${id}.png`)); }));
+check('filler + relay decals shipped and wired', ['sparkcoil', 'flakpost', 'tarsprayer', 'relay'].every((id) => { const e = TOWERS.find((t) => t.id === id); return e && e.art === `assets/towers/${id}.webp` && fs.existsSync(path.join(ROOT, `assets/towers/${id}.webp`)); }));
 check('FLAK POST flies a new air rule (only) + fire-control honors it', combat.includes("flakpost: { air: 'only' }") && combat.includes("if (rule.air === 'only' && !enemy.t.flying) return false;"));
 check('new fire cases wired (fx-spark + fx-flak + flyer-only burst)', combat.includes("case 'sparkcoil':") && combat.includes("fireLine(tower, target, 'fx-spark'") && combat.includes("case 'flakpost':") && combat.includes("fireLine(tower, target, 'fx-flak'") && combat.includes('!enemy.t.flying) continue;'));
 check('tar slick applies to walkers only + drags both move paths', combat.includes('enemy.tar = es.slow; enemy.tarT = 0.4;') && (combat.match(/tarMult\(enemy\)/g) || []).length >= 2 && combat.includes('function tarMult(enemy)'));
@@ -360,7 +360,7 @@ check('souls + drones stay kamikaze (first touch still deletes them)', combat.in
 check('summon tip shows ONLY name + tag + hull (no allegiance, no payload rows)', !combat.includes('ALLEGIANCE') && !combat.includes('CONTACT DMG') && !combat.includes('TOWERS IGNORE IT</b>') && combat.includes('tip-hp-track'));
 check('FULL CLEARANCE SHOP: admin bypass wired in visibility + both purchase paths', shopjs.includes('const clearanceOk = isAdminProfile(profile) || profile.level >= entry.unlock;') && serverjs.includes('meta.level < item.unlock && !isAdmin(name)') && appjs.includes('meta.level < item.unlock && !(meta.admin || isAdminName(account.name))') && serverjs.includes('meta.level < card.unlock && !isAdmin(name)') && appjs.includes('meta.level < card.unlock && !(meta.admin || isAdminName(account.name))'));
 check('vault tab unlock honors admin too', shopjs.includes('const locked = !isAdminProfile(profile) && profile.level < card.unlock;'));
-check('five new decals shipped in the die-cut family', ['veteran', 'warbonds', 'wardrums', 'deathwarrant', 'paragon'].every((id) => fs.existsSync(path.join(ROOT, `assets/towers/${id}.png`))) && shopjs.includes("art: 'assets/towers/veteran.png'") && shopjs.includes("art: 'assets/towers/deathwarrant.png'"));
+check('five new decals shipped in the die-cut family', ['veteran', 'warbonds', 'wardrums', 'deathwarrant', 'paragon'].every((id) => fs.existsSync(path.join(ROOT, `assets/towers/${id}.webp`))) && shopjs.includes("art: 'assets/towers/veteran.webp'") && shopjs.includes("art: 'assets/towers/deathwarrant.webp'"));
 check('new rigs registered in TOWER_RULES + SHOP mirrors (server + LOCAL)', combat.includes("veteran: { air: 'no' }") && combat.includes("deathwarrant: { air: 'yes' }") && combat.includes("paragon: { air: 'yes' }") && serverjs.includes("veteran: { name: 'THE VETERAN', unlock: 40, price: { nc: 13500, bt: 180 }, currency: 'mixed' }") && appjs.includes("warbonds: { name: 'WAR BONDS', unlock: 14, price: { nc: 2800, bt: 40 }, currency: 'mixed' }"));
 check('new tower kits + paints styled on the grid', styles.includes('.tw-kit-trirail') && styles.includes('.tw-kit-vault') && styles.includes('.tw-kit-drumhead') && styles.includes('.tw-kit-spire') && styles.includes('.tw-kit-laurel') && styles.includes('.tw-veteran .tw-base') && styles.includes('.tw-paragon .tw-base'));
 check('panel rows for the new rigs (weapon rack / bond / frag / verdict / tithe)', combat.includes('WEAPON RACK') && combat.includes('BOND BALANCE') && combat.includes('FRAG ROUNDS') && combat.includes('NEXT VERDICT') && combat.includes('GOLDEN TITHE'));
@@ -378,9 +378,9 @@ check('TRUE MORTAR no longer cuts the clock (rate stays 0.35 after BETTER SCOPE)
 check('DRONE SPAWNER maxed line fields 115 DPS (300 payload / 2.6s cadence)', drone && Math.round(drone.track[3].sets.drone / drone.track[3].sets.launchEvery) === 115);
 check('DRONE SPAWNER ladder is monotonic in payload (90/150/220/300)', [drone.stats.drone, ...drone.track.filter((t) => t.sets.drone).map((t) => t.sets.drone)].join(',') === '90,150,220,300');
 check('FIELD AUDIT logged: 2026.11.04 entry leads the update log', appjs.indexOf("version: '2026.11.04', tag: 'FIELD AUDIT'") > -1 && appjs.indexOf("version: '2026.11.04'") < appjs.indexOf("version: '2026.11.03'"));
-check('BUILD bumped to 2026.11.05', appjs.includes("const BUILD = '2026.11.05';"));
-check('footer brands GLL FOUNDATIONS', indexhtml.includes('BUILD 2026.11.05 // GLL FOUNDATIONS'));
-check('all 6 assets cache-busted to 20261024l', (indexhtml.match(/\?v=20261024l/g) || []).length === 6);
+check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
+check('footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP'));
+check('all 6 assets cache-busted to 20261024n', (indexhtml.match(/\?v=20261024n/g) || []).length === 6);
 
 console.log('--- GLL FOUNDATIONS (2026.11.05): hosting merge, npm test law, env admin key ---');
 check('GLL FOUNDATIONS logged: 2026.11.05 entry leads the update log', appjs.indexOf("version: '2026.11.05', tag: 'GLL FOUNDATIONS'") > -1 && appjs.indexOf("version: '2026.11.05'") < appjs.indexOf("version: '2026.11.04'"));

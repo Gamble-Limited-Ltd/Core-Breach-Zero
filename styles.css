@@ -1158,3 +1158,6 @@ dialog.shop-open { width: min(1060px, calc(100% - 28px)); }
 .fx-warrant-line { stroke: rgba(185,141,240,.55); stroke-width: 1.2; stroke-dasharray: 4 6; }
 .fx-line.fx-warrant { stroke: #c9a2ff; filter: drop-shadow(0 0 10px rgba(185,141,240,1)); animation: fx-flash .5s ease-out forwards; }
 .fx-line.fx-warrant-core { stroke: #ffffff; filter: drop-shadow(0 0 14px rgba(255,255,255,1)); animation: fx-flash .5s ease-out forwards; }
+
+.credit { margin: 14px 0; text-align: center; color: #b1beb8; font: 13px/1.5 var(--mono); }
+.credit a { color: #7fe3b0; }

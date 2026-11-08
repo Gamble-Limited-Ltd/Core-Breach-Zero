@@ -14,8 +14,16 @@ document.querySelector('#server-port').textContent = `PORT ${port}`;
 document.querySelector('#preview-port').textContent = port;
 
 // --- Update log: every deployment to the grid, newest first ----------------------
-const BUILD = '2026.11.05';
+const BUILD = '2026.11.06';
 const UPDATE_LOG = [
+  {
+    version: '2026.11.06', tag: 'HOSTING PREP',
+    items: [
+      ['UI', 'Credits you can read — "Game created and owned by Jackson Loomis. Hosted and assisted by Gamble Limited Ltd." now shows on the home screen, the login card and a new ABOUT & CREDITS menu entry (never inside a match).'],
+      ['PERF', 'Tower art went from 2.7 MB of mislabelled JPEGs to 850 KB of 512px WebP, and the server now sends cache headers, ETags and gzip: repeat visits revalidate with a 304, versioned scripts cache for a year, and text files shrink by about three quarters on school networks.'],
+      ['OPS', 'Image types (png, webp, svg) now carry their real content type; the smoke test covers mime, cache, 304 and gzip.'],
+    ],
+  },
   {
     version: '2026.11.05', tag: 'GLL FOUNDATIONS',
     items: [
@@ -311,6 +319,11 @@ const menus = {
     tag: 'PATCH RECORDS', title: 'UPDATE LOG',
     description: 'Every deployment to the Core Breach grid, newest first. The grid keeps receipts.',
     stats: [['ENTRIES', `${UPDATE_LOG.length}`], ['LATEST', UPDATE_LOG[0].version], ['BUILD', BUILD]],
+  },
+  about: {
+    tag: 'CREDITS', title: 'ABOUT & CREDITS',
+    description: 'Game created and owned by Jackson Loomis. Hosted and assisted by Gamble Limited Ltd.',
+    stats: [['CREATED BY', 'JACKSON LOOMIS'], ['HOSTED BY', 'GAMBLE LIMITED LTD'], ['LICENSE', 'POLYFORM NONCOMMERCIAL 1.0.0']],
   },
 };
 

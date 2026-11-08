@@ -3,7 +3,7 @@
 Rules for every agent and human working on Core Breach: Zero. Read this first, every session. If something here is wrong, fix it in the same commit.
 
 ## The project
-- Browser tower defense game by Loomis (`jacksonloomis-commits`), who owns it. Gamble Limited Ltd (GLL, James `TheGeneral4757`) hosts it and helps with hosting, tests, CI, docs and security.
+- Browser tower defense game created and owned by Jackson Loomis (`jacksonloomis-commits`), who owns it. Gamble Limited Ltd (GLL, James `TheGeneral4757`) hosts it and helps with hosting, tests, CI, docs and security.
 - Stack: plain browser JavaScript, no build step. Node server (`server.js`) with `ws` for rooms. Accounts live in `accounts.json` (not in git).
 - License: PolyForm Noncommercial 1.0.0 (`LICENSE`). The author keeps the copyright (`NOTICE`). Play money only: no real-money features, no ads.
 
@@ -12,7 +12,7 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - `app.js`: menus, accounts, rooms, offline LOCAL mode.
 - `combat.js`: the in-match game.
 - `shop.js`: the Nexus Shop UI (economy is mirrored in `server.js`: keep them in sync).
-- `server.js`: static files, account/shop/room API, WebSocket rooms.
+- `server.js`: static files (ETag, gzip, Cache-Control: `?v=` assets are immutable, html revalidates, art caches a day), account/shop/room API, WebSocket rooms.
 - `scripts/`: tests (`*-test.js`), `run-tests.js` (what `npm test` runs), `qa-*.sh` browser QA.
 - `terms.html`: draft Terms of Service.
 
@@ -28,8 +28,10 @@ Rules for every agent and human working on Core Breach: Zero. Read this first, e
 - Account linking and leaderboards must stay open-ended: do not hardcode the account model or score storage in a way that blocks a future leaderboard or GLL ID/GATE login.
 - Keep the glowing home-screen menus and their look.
 - Keep `README.md`, `AGENTS.md` and `CLAUDE.md` current in the same commit as the change.
+- Tower art is 512px WebP in `assets/towers/`; keep new art at that size and format.
 - Bump the `?v=` cache-bust string in `index.html` when you change `app.js`, `combat.js`, `shop.js` or `styles.css`.
 
 ## Working together
 - GLL may open issues and PRs on GitHub. The author replies there.
 - Found a bug? Open an issue and say what you saw and how to repeat it.
+- Credit line (home footer, login card, About menu, README, Terms): "Game created and owned by Jackson Loomis. Hosted and assisted by Gamble Limited Ltd." Keep it readable, never on in-match screens or near the main logo.

@@ -30,13 +30,13 @@ async function api(path, payload) {
   check('homepage 200', home.status === 200);
   const shopjs = await fetch(`${BASE}/shop.js`);
   check('shop.js served 200', shopjs.status === 200);
-  const decal = await fetch(`${BASE}/assets/towers/sentinel.png`);
+  const decal = await fetch(`${BASE}/assets/towers/sentinel.webp`);
   check('tower decal asset served', decal.ok);
-  const sgdecal = await fetch(`${BASE}/assets/towers/shotgunner.png`);
+  const sgdecal = await fetch(`${BASE}/assets/towers/shotgunner.webp`);
   check('shotgunner decal asset served', sgdecal.ok);
-  const sdecal = await fetch(`${BASE}/assets/towers/sniper.png`);
+  const sdecal = await fetch(`${BASE}/assets/towers/sniper.webp`);
   check('sniper decal asset served', sdecal.ok);
-  const shdecal = await fetch(`${BASE}/assets/towers/shredder.png`);
+  const shdecal = await fetch(`${BASE}/assets/towers/shredder.webp`);
   check('shredder decal asset served', shdecal.ok);
 
   const identity = { identity: 'SHOPCMDR1', passcode: 'test1234' };
