@@ -1,6 +1,7 @@
 // Core Breach: Zero — Combat Protocol (Easy Mode).
 // Loaded after app.js: uses its globals (BATTLE_MAPS, svgNode, playSound, showToast...).
 // Mode voting (EASY + MEDIUM) + per-protocol wave ladders + enemies that follow every map's tracks and mechanics.
+import { rand } from './src/sim/rng.js';
 import { BASE_MAX, BLOAT_EMP_RADIUS, BLOAT_EMP_SECONDS, CORE_CLEAR, EASY_BOSS_RELIEF, EASY_WAVES, ENEMY_TYPES, FOOT_HALF, MODE_BOSS_LEAK, MODE_HP_GROWTH, MODE_HP_SCALE, MODE_LEAK, MODE_SPEED, NUKE_COOLDOWN, NUKE_COST, NUKE_DAMAGE, NUKE_RADIUS, PAD_AIR_BOOST, PAD_SNAP, SEP, SPAWN_GAP, START_SALVAGE, SUMMON_CAP, SURGE_MODS, TOWER_BASE, TOWER_PER_ALLY, TOWER_RULES, TRACK_CLEAR, VETERAN_GUNS, WASTE_DPS, WASTE_RADIUS, WASTE_SECONDS, WAVES, WAVE_HP_SCALE } from './src/combat/data.js';
 (() => {
 const board = document.querySelector('#board');
@@ -394,7 +395,7 @@ function spawnEnemy(key, pathIdx) {
     // Wave pressure: HP scales per wave index, surge modifiers stack on top.
     // Easy relief: commanders (bosses) spawn with slightly less hull on EASY.
     hp: Math.round(t.hp * (t.boss ? state.bossHpMult : 1) * (state.hpScale || 1)), maxHp: Math.round(t.hp * (t.boss ? state.bossHpMult : 1) * (state.hpScale || 1)), shield: 0, maxShield: t.shield || 0,
-    pathIdx, dist: debugFreeze ? 260 + Math.random() * 480 : 0, speed: t.speed * (state.surgeSpeed || 1) * (MODE_SPEED[state.protocol] || 1), alive: true,
+    pathIdx, dist: debugFreeze ? 260 + rand() * 480 : 0, speed: t.speed * (state.surgeSpeed || 1) * (MODE_SPEED[state.protocol] || 1), alive: true,
     usedGates: new Set(), pulseTimer: 8, replicated: false, shielded: false, angle: 0,
   };
   if (t.flying) {
@@ -402,7 +403,7 @@ function spawnEnemy(key, pathIdx) {
     const [sx, sy] = state.samplers[pathIdx].at(0);
     const [tx, ty] = corePos();
     enemy.flight = { sx, sy, tx, ty, total: Math.max(1, Math.hypot(tx - sx, ty - sy)) };
-    enemy.dist = debugFreeze ? Math.min(enemy.flight.total * 0.85, 260 + Math.random() * 480) : 0;
+    enemy.dist = debugFreeze ? Math.min(enemy.flight.total * 0.85, 260 + rand() * 480) : 0;
   }
   state.enemies.push(enemy);
   const [x, y] = enemy.flight ? flightPos(enemy, enemy.dist) : state.samplers[pathIdx].at(enemy.dist);
@@ -757,8 +758,20 @@ function tick(ts) {
   let dt = Math.min(0.05, (ts - ui.last) / 1000 || 0);
   ui.last = ts;
   if (state.speed2x) dt *= 2; // OVERDRIVE perk: the whole sim runs at double tempo
+  if (coopGuest()) { state.clock += dt; guestFrame(dt); return; }
+  simStep(dt);
+  renderProjectiles();
+  renderEnemies();
+  renderTowers();
+  if (coopHost()) {
+    state.syncT -= dt;
+    if (state.syncT <= 0) { state.syncT = 0.12; coopBroadcast(); }
+  }
+}
+
+// One fixed-or-variable sim step: no requestAnimationFrame, no clock reads, no view calls. A host can call it with a fixed dt.
+function simStep(dt) {
   state.clock += dt;
-  if (coopGuest()) { guestFrame(dt); return; }
   if (state.mode === 'countdown') {
     state.countdown -= dt;
     const n = Math.ceil(state.countdown);
@@ -771,13 +784,6 @@ function tick(ts) {
   state.enemies = state.enemies.filter((enemy) => enemy.alive);
   updateTowers(dt);
   updateProjectiles(dt);
-  renderProjectiles();
-  renderEnemies();
-  renderTowers();
-  if (coopHost()) {
-    state.syncT -= dt;
-    if (state.syncT <= 0) { state.syncT = 0.12; coopBroadcast(); }
-  }
 }
 
 // RAMPAGE UNIT: berserk drive — the lower the hull, the higher the speed.
@@ -2248,14 +2254,14 @@ function updateTowers(dt) {
         tower.veinCd -= dt;
         if (tower.veinCd <= 0) {
           const [lo, hi] = es.veinRate || [0.1, 1];
-          tower.veinCd = lo + Math.random() * (hi - lo);
+          tower.veinCd = lo + rand() * (hi - lo);
           const pool = state.enemies.filter((enemy) => {
             if (!enemy.alive || enemy.friendly) return false;
             const [px, py] = posOf(enemy);
             return Math.hypot(px - tower.x, py - tower.y) <= es.rng;
           });
           if (pool.length) {
-            const target = pool[Math.floor(Math.random() * pool.length)];
+            const target = pool[Math.floor(rand() * pool.length)];
             const [tx, ty] = posOf(target);
             const burst = svgNode('circle', { class: 'fx-ring fx-veins-burst', cx: tx, cy: ty, r: 6 });
             ui.layers.fx.appendChild(burst);
