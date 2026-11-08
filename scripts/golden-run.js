@@ -7,7 +7,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || path.join(os.homedir(), 'gll-id/node_modules/playwright'));
-const FILE = path.join(__dirname, 'golden/solo-easy.json');
+const TOWER = (process.argv.find((a) => a.startsWith('--tower=')) || '').slice(8); // e.g. --tower=lazermortar (reward blueprint)
+const FILE = path.join(__dirname, TOWER ? `golden/solo-easy-${TOWER}.json` : 'golden/solo-easy.json');
 const BASE = `http://127.0.0.1:${process.env.PORT || 3777}`;
 const FRAMES = 3600; // 60 s of sim at 60 fps
 const EVERY = 300;
@@ -26,12 +27,24 @@ const EVERY = 300;
     window.cancelAnimationFrame = () => {};
     window.__step = (n) => { for (let i = 0; i < n; i += 1) { now += 1000 / 60; const q = queue; queue = []; q.forEach((cb) => cb(now)); } };
   });
-  await page.goto(`${BASE}/?cash=2000`);
+  await page.goto(`${BASE}/?cash=2000${process.env.GOLDEN_QUERY || ""}`); // GOLDEN_QUERY=&cbzwave=12 explores other waves (view check only; do not --update)
   await page.waitForFunction(() => window.CBZShop && window.CBZCombat);
-  await page.click('#tab-register');
   const id = 'G' + Date.now().toString(36).toUpperCase();
-  await page.fill('#auth-name', id); await page.fill('#auth-email', `${id}@example.com`);
-  await page.fill('#auth-passcode', 'goldenpass1'); await page.fill('#auth-confirm', 'goldenpass1');
+  if (TOWER) {
+    // Account made over the API: earn the reward blueprint and equip it alone, then log in through the page.
+    const post = (url, body) => fetch(BASE + url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+    const reg = await post('/api/register', { name: id, email: `${id}@example.com`, passcode: 'goldenpass1' });
+    const t = { token: reg.token };
+    await post('/api/mission/complete', { ...t, result: 'win', wavesCleared: 10, bossesKilled: 1, difficulty: 'easy' });
+    await post('/api/shop/purchase', { ...t, itemId: TOWER });
+    const lo = await post('/api/loadout', { ...t, loadout: [TOWER] });
+    if (!lo.ok) { console.log('LOADOUT SETUP FAILED', JSON.stringify(lo)); process.exit(1); }
+    await page.fill('#auth-identity', id); await page.fill('#auth-passcode', 'goldenpass1');
+  } else {
+    await page.click('#tab-register');
+    await page.fill('#auth-name', id); await page.fill('#auth-email', `${id}@example.com`);
+    await page.fill('#auth-passcode', 'goldenpass1'); await page.fill('#auth-confirm', 'goldenpass1');
+  }
   await page.click('#auth-submit');
   await page.waitForSelector('.menu-item[data-menu="play"]', { state: 'visible' });
   await page.click('.menu-item[data-menu="play"]'); await page.click('.bay-recon');
@@ -41,7 +54,7 @@ const EVERY = 300;
   // Pads are always valid deploy spots (and give anti-air), so click the first four pad centres.
   const pads = await page.locator('[data-pad]').evaluateAll((els) => els.slice(0, 4).map((el) => { const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   for (const [x, y] of pads) {
-    await page.click('.lo-slot');
+    await page.click('.lo-slot[data-tower]');
     await page.mouse.move(x, y);
     await page.evaluate(() => window.__step(2));
     await page.mouse.click(x, y);
@@ -51,6 +64,11 @@ const EVERY = 300;
   for (let f = 0; f < FRAMES; f += EVERY) {
     await page.evaluate((n) => window.__step(n), EVERY);
     const st = await page.evaluate(() => { const s = CBZCombat.stats(); delete s.towersDetail; return s; });
+    // View check (not part of the golden): every live enemy and tower has exactly one SVG group.
+    const nodes = await page.evaluate(() => document.querySelectorAll('g.enemy:not(.dying)').length);
+    const towerNodes = await page.evaluate(() => document.querySelectorAll('g.tower').length);
+    if (towerNodes !== st.towers) { console.log(`VIEW MISMATCH at frame ${f + EVERY}: ${towerNodes} tower nodes, ${st.towers} towers`); process.exit(1); }
+    if (nodes !== st.enemies) { console.log(`VIEW MISMATCH at frame ${f + EVERY}: ${nodes} nodes, ${st.enemies} enemies`); process.exit(1); }
     out.push({ frame: f + EVERY, ...st });
   }
   await browser.close();

@@ -1,6 +1,8 @@
 // Core Breach: Zero — Combat Protocol (Easy Mode).
 // Loaded after app.js: uses its globals (BATTLE_MAPS, svgNode, playSound, showToast...).
 // Mode voting (EASY + MEDIUM) + per-protocol wave ladders + enemies that follow every map's tracks and mechanics.
+import { rand } from './src/sim/rng.js';
+import { buildSampler } from './src/sim/track.js';
 import { BASE_MAX, BLOAT_EMP_RADIUS, BLOAT_EMP_SECONDS, CORE_CLEAR, EASY_BOSS_RELIEF, EASY_WAVES, ENEMY_TYPES, FOOT_HALF, MODE_BOSS_LEAK, MODE_HP_GROWTH, MODE_HP_SCALE, MODE_LEAK, MODE_SPEED, NUKE_COOLDOWN, NUKE_COST, NUKE_DAMAGE, NUKE_RADIUS, PAD_AIR_BOOST, PAD_SNAP, SEP, SPAWN_GAP, START_SALVAGE, SUMMON_CAP, SURGE_MODS, TOWER_BASE, TOWER_PER_ALLY, TOWER_RULES, TRACK_CLEAR, VETERAN_GUNS, WASTE_DPS, WASTE_RADIUS, WASTE_SECONDS, WAVES, WAVE_HP_SCALE } from './src/combat/data.js';
 (() => {
 const board = document.querySelector('#board');
@@ -45,39 +47,41 @@ function limitToast(entry) {
 
 
 // --- Mission state ----------------------------------------------------------------
+// --- Presentation events ----------------------------------------------------------------
+// The sim reports what happened (rings, floating text, banners, sounds); the view decides how to show it.
+// A headless host (the server) simply registers no handlers. Dispatch is synchronous, so order is unchanged.
+const view = {};
+function emit(type, ...args) { const handler = view[type]; if (handler) handler(...args); }
+
+// Simulation state: plain data only (the part a server can run). Anything that touches the page lives in `ui`.
 const state = {
   mode: 'idle', // idle | vote | countdown | waves | over
-  protocol: 'easy', speed2x: false, bossHpMult: 1, speedBtn: null, nukeBtn: null,
-  nukeAim: false, crosshair: null, wasteZones: [],
+  protocol: 'easy', speed2x: false, bossHpMult: 1,
+  wasteZones: [],
   map: null, samplers: [], gateEvents: [], zoneRanges: [],
   waveIndex: -1, queue: [], spawnGap: 0, intermission: 0, countdown: 0,
   cash: 0, baseHp: BASE_MAX, enemies: [], kills: 0, bossesKilled: 0, earned: 0, clock: 0, nidSeq: 0,
-  towers: [], projectiles: [], building: null, ghost: null, bar: null, towerPanel: null, panelTower: null,
-  bonusNc: 0, mouseX: 500, mouseY: 300, mouseOn: false,
+  towers: [], projectiles: [], pidSeq: 0, tidSeq: 0,
+  bonusNc: 0,
+  corpseLust: 0, // reserved telemetry: total Blood Lust banked across Blossoms
+};
+
+// View/input state: DOM handles, pointer, build mode, frame timer. Never read by sim rules.
+const ui = {
+  speedBtn: null, nukeBtn: null, nukeAim: false, crosshair: null,
+  building: null, ghost: null, bar: null, towerPanel: null, panelTower: null,
+  mouseX: 500, mouseY: 300, mouseOn: false,
   raf: 0, last: 0,
   hud: null, bossBar: null, tip: null, tipTarget: null, votePanel: null, endPanel: null, banner: null,
   layers: null, deployBtn: null,
-  corpseLust: 0, // reserved telemetry: total Blood Lust banked across Blossoms
 };
 
 const debugWave = Number(new URLSearchParams(location.search).get('cbzwave') || 0);
 const debugCash = Number(new URLSearchParams(location.search).get('cash') || 0);
 const debugFreeze = new URLSearchParams(location.search).has('freeze');
 
-// --- Track engine: sample every SVG path once, then move by arc length -------------
-function buildSamplers(map) {
-  return map.paths.map((d) => {
-    const el = svgNode('path', { d });
-    const len = el.getTotalLength();
-    const step = 2;
-    const pts = [];
-    for (let l = 0; l <= len; l += step) {
-      const p = el.getPointAtLength(l);
-      pts.push([p.x, p.y]);
-    }
-    return { pts, len, step, at(dist) { return pts[Math.min(pts.length - 1, Math.max(0, Math.round(dist / step)))]; } };
-  });
-}
+// --- Track engine: sample every map path once (src/sim/track.js, no DOM), then move by arc length ---
+function buildSamplers(map) { return map.paths.map(buildSampler); }
 
 function nearestDist(sampler, x, y) {
   let best = 0;
@@ -227,32 +231,160 @@ function shapeFor(key, t) {
   return nodes;
 }
 
-// --- Spawning / damage / death -------------------------------------------------------
-function spawnEnemy(key, pathIdx) {
-  const t = ENEMY_TYPES[key];
-  const g = svgNode('g', { class: `enemy e-${key}${t.boss ? ' e-boss' : ''}${state.protocol === 'crimson' ? ` e-crimson${state.surgeMod ? ' e-surge' : ''}` : ''}` });
-  // Shapes live in an inner chassis so CSS spawn/death/hover animations can scale or
-  // bob them freely — a CSS transform on this outer group would override the
-  // per-frame position attribute and teleport the unit toward the board corner.
+// --- Enemy view -------------------------------------------------------------------------
+// Enemies are plain data. One SVG group per enemy id lives here: built on first sight, posed from
+// fx/fy/angle and status fields every tick, retired when the sim marks the enemy dead (fate).
+const enemyViews = new Map();
+
+function buildEnemyView(enemy) {
+  const { key, t } = enemy;
+  let g;
+  let barW = 22;
   const chassis = svgNode('g', { class: 'e-chassis' });
-  for (const node of shapeFor(key, t)) chassis.appendChild(node);
+  if (key === 'soul') {
+    g = svgNode('g', { class: 'enemy e-summon e-soul' });
+    chassis.appendChild(svgNode('circle', { class: 'soul-halo', r: 11 }));
+    chassis.appendChild(svgNode('circle', { class: 'soul-core', r: 5 }));
+    chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: -2, cy: -1.4, r: 1.2 }));
+    chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: 2.4, cy: -1.4, r: 1.2 }));
+  } else {
+    if (key === 'drone') g = svgNode('g', { class: 'enemy e-summon e-drone e-strike' });
+    else if (enemy.friendly) g = svgNode('g', { class: `enemy e-summon e-${key}` });
+    else {
+      barW = t.boss ? 34 : 22;
+      g = svgNode('g', { class: `enemy e-${key}${t.boss ? ' e-boss' : ''}${state.protocol === 'crimson' ? ` e-crimson${state.surgeMod ? ' e-surge' : ''}` : ''}` });
+    }
+    for (const node of shapeFor(key, t)) chassis.appendChild(node);
+  }
+  // Shapes live in an inner chassis so CSS spawn/death/hover animations can scale or bob them
+  // freely: a CSS transform on this outer group would override the per-frame position attribute.
   g.appendChild(chassis);
   // The dawn marks its own: a pulsing crimson aura ring orbits every hostile.
-  if (state.protocol === 'crimson') g.insertBefore(svgNode('circle', { class: 'e-aura', r: t.size + 7 }), chassis);
+  if (!enemy.friendly && state.protocol === 'crimson') g.insertBefore(svgNode('circle', { class: 'e-aura', r: t.size + 7 }), chassis);
   const barY = -(t.size + 13);
-  const barW = t.boss ? 34 : 22;
   g.appendChild(svgNode('rect', { class: 'hp-bg', x: -barW / 2, y: barY, width: barW, height: 3.4 }));
   const fill = svgNode('rect', { class: 'hp-fill', x: -barW / 2, y: barY, width: barW, height: 3.4 });
   g.appendChild(fill);
-  const shieldFill = svgNode('rect', { class: 'shield-fill', x: -barW / 2, y: barY - 4, width: 0, height: 2.4 });
-  g.appendChild(shieldFill);
+  let shieldFill = fill;
+  if (!enemy.friendly) {
+    shieldFill = svgNode('rect', { class: 'shield-fill', x: -barW / 2, y: barY - 4, width: 0, height: 2.4 });
+    g.appendChild(shieldFill);
+  }
+  const tipIn = enemy.friendly ? showSummonTip : showTip;
+  g.addEventListener('pointerenter', (event) => tipIn(enemy, event));
+  g.addEventListener('pointermove', moveTip);
+  g.addEventListener('pointerleave', () => hideTip(enemy));
+  ui.layers.enemies.appendChild(g);
+  if (key !== 'drone') {
+    g.classList.add('spawn-in');
+    setTimeout(() => g.classList.remove('spawn-in'), 420);
+  }
+  return { g, fill, shieldFill, barW };
+}
+
+function renderEnemies() {
+  if (!ui.layers) return;
+  const seen = new Set();
+  for (const enemy of state.enemies) {
+    if (enemy.guest) continue;
+    seen.add(enemy.nid);
+    let v = enemyViews.get(enemy.nid);
+    if (!v) { v = buildEnemyView(enemy); v.enemy = enemy; enemyViews.set(enemy.nid, v); }
+    const spin = enemy.flight && !enemy.friendly ? ` rotate(${enemy.angle.toFixed(1)})` : enemy.key === 'runner' ? ` rotate(${enemy.angle.toFixed(1)})` : '';
+    v.g.setAttribute('transform', `translate(${enemy.fx.toFixed(1)} ${enemy.fy.toFixed(1)})${spin}`);
+    v.g.classList.toggle('e-stunned', enemy.stun > 0);
+    v.g.classList.toggle('e-haste', Boolean(enemy.hasted));
+    v.g.classList.toggle('e-cloak', Boolean(enemy.cloaked));
+    if (enemy.shielded) { const ring = v.g.querySelector('.e-shield-ring'); if (ring) ring.classList.add('on'); }
+  }
+  for (const [nid, v] of enemyViews) {
+    const enemy = v.enemy;
+    if (enemy.alive && !seen.has(nid)) { v.g.remove(); enemyViews.delete(nid); continue; } // mission reset dropped it
+    if (enemy.alive) {
+      v.fill.setAttribute('width', (v.barW * enemy.hp) / enemy.maxHp);
+      v.fill.classList.toggle('low', enemy.hp / enemy.maxHp < 0.35);
+      v.shieldFill.setAttribute('width', enemy.maxShield ? (v.barW * enemy.shield) / enemy.maxShield : 0);
+    } else {
+      if (enemy.fate === 'dying') { v.g.classList.add('dying'); setTimeout(() => v.g.remove(), 300); } else v.g.remove();
+      enemyViews.delete(nid);
+    }
+  }
+}
+
+// --- Tower view -------------------------------------------------------------------------
+// Towers are plain data (x, y, lvl, offlineT, charge, aim...). The SVG group, head rotation, status
+// classes and the Deathwarrant's lock graphics live here, keyed by tower uid. Co-op guest towers
+// (tower.guest) still carry their own node.
+const towerViews = new Map();
+
+function makeTowerView(tower) {
+  const node = towerNode(tower.entry, tower.x, tower.y);
+  node.dataset.uid = tower.uid;
+  ui.layers.towers.appendChild(node);
+  const v = { node, head: node.querySelector('.tw-head'), tower, warrant: null };
+  towerViews.set(tower.uid, v);
+  return v;
+}
+
+function towerNodeOf(tower) {
+  if (tower.guest) return tower.node;
+  const v = towerViews.get(tower.uid);
+  return v ? v.node : null;
+}
+
+function dropTowerView(tower) {
+  const v = towerViews.get(tower.uid);
+  if (!v) return;
+  v.node.remove();
+  if (v.warrant) for (const el of Object.values(v.warrant)) el.remove();
+  towerViews.delete(tower.uid);
+}
+
+function renderTowers() {
+  if (!ui.layers) return;
+  const seen = new Set();
+  for (const tower of state.towers) {
+    if (tower.guest) continue;
+    seen.add(tower.uid);
+    const v = towerViews.get(tower.uid) || makeTowerView(tower);
+    v.node.classList.toggle('tw-offline', (tower.offlineT || 0) > 0);
+    v.node.classList.toggle('tw-charging', Boolean(tower.charge));
+    if (v.head && tower.aim !== undefined && tower.aim !== v.aim) { v.aim = tower.aim; v.head.setAttribute('transform', `rotate(${tower.aim.toFixed(1)})`); }
+    const charge = tower.charge;
+    if (charge && !v.warrant) {
+      const ring = svgNode('circle', { class: 'fx-warrant-ring', cx: tower.x, cy: tower.y, r: 6 });
+      const lock = svgNode('g', { class: 'fx-warrant-lock' });
+      lock.appendChild(svgNode('path', { d: 'M0 -14 L14 0 L0 14 L-14 0 Z' }));
+      const line = svgNode('line', { class: 'fx-warrant-line', x1: tower.x, y1: tower.y, x2: charge.x.toFixed(1), y2: charge.y.toFixed(1) });
+      ui.layers.fx.appendChild(line);
+      ui.layers.fx.appendChild(ring);
+      ui.layers.fx.appendChild(lock);
+      v.warrant = { ring, lock, line };
+    }
+    if (charge && v.warrant) {
+      const { ring, lock, line } = v.warrant;
+      lock.setAttribute('transform', `translate(${charge.x.toFixed(1)} ${charge.y.toFixed(1)})`);
+      line.setAttribute('x2', charge.x.toFixed(1));
+      line.setAttribute('y2', charge.y.toFixed(1));
+      ring.setAttribute('r', (6 + 30 * (1 - Math.max(0, charge.t) / charge.total)).toFixed(1));
+    } else if (v.warrant) {
+      for (const el of Object.values(v.warrant)) el.remove();
+      v.warrant = null;
+    }
+  }
+  for (const [uid, v] of towerViews) if (!seen.has(uid)) dropTowerView(v.tower); // sold or mission reset
+}
+
+// --- Spawning / damage / death -------------------------------------------------------
+function spawnEnemy(key, pathIdx) {
+  const t = ENEMY_TYPES[key];
   const enemy = {
-    key, t, node: g, fill, shieldFill,
+    key, t,
     nid: ++state.nidSeq,
     // Wave pressure: HP scales per wave index, surge modifiers stack on top.
     // Easy relief: commanders (bosses) spawn with slightly less hull on EASY.
     hp: Math.round(t.hp * (t.boss ? state.bossHpMult : 1) * (state.hpScale || 1)), maxHp: Math.round(t.hp * (t.boss ? state.bossHpMult : 1) * (state.hpScale || 1)), shield: 0, maxShield: t.shield || 0,
-    pathIdx, dist: debugFreeze ? 260 + Math.random() * 480 : 0, speed: t.speed * (state.surgeSpeed || 1) * (MODE_SPEED[state.protocol] || 1), alive: true,
+    pathIdx, dist: debugFreeze ? 260 + rand() * 480 : 0, speed: t.speed * (state.surgeSpeed || 1) * (MODE_SPEED[state.protocol] || 1), alive: true,
     usedGates: new Set(), pulseTimer: 8, replicated: false, shielded: false, angle: 0,
   };
   if (t.flying) {
@@ -260,21 +392,14 @@ function spawnEnemy(key, pathIdx) {
     const [sx, sy] = state.samplers[pathIdx].at(0);
     const [tx, ty] = corePos();
     enemy.flight = { sx, sy, tx, ty, total: Math.max(1, Math.hypot(tx - sx, ty - sy)) };
-    enemy.dist = debugFreeze ? Math.min(enemy.flight.total * 0.85, 260 + Math.random() * 480) : 0;
+    enemy.dist = debugFreeze ? Math.min(enemy.flight.total * 0.85, 260 + rand() * 480) : 0;
   }
-  g.addEventListener('pointerenter', (event) => showTip(enemy, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(enemy));
-  state.layers.enemies.appendChild(g);
   state.enemies.push(enemy);
   const [x, y] = enemy.flight ? flightPos(enemy, enemy.dist) : state.samplers[pathIdx].at(enemy.dist);
   enemy.fx = x;
   enemy.fy = y;
-  g.setAttribute('transform', `translate(${x} ${y})`);
-  g.classList.add('spawn-in');
-  if (state.protocol === 'crimson') fxRing(x, y, 'fx-ring-crimson'); // the vein spits them out burning
-  setTimeout(() => g.classList.remove('spawn-in'), 420);
-  if (t.boss) { banner(t.name, '// HOSTILE COMMANDER DETECTED', 'banner-red'); updateBossBar(); }
+  if (state.protocol === 'crimson') emit('ring', x, y, 'fx-ring-crimson'); // the vein spits them out burning
+  if (t.boss) { emit('banner', t.name, '// HOSTILE COMMANDER DETECTED', 'banner-red'); updateBossBar(); }
   return enemy;
 }
 
@@ -301,14 +426,12 @@ function damageEnemy(enemy, amount, opts = {}) {
   if (enemy.key === 'overseer' && !enemy.shielded && enemy.hp <= enemy.maxHp * 0.25) {
     enemy.shielded = true;
     enemy.shield = enemy.maxShield;
-    enemy.node.querySelector('.e-shield-ring').classList.add('on');
-    fxRing(...posOf(enemy), 'fx-ring-white');
+    emit('ring', ...posOf(enemy), 'fx-ring-white');
   }
   if (enemy.hp <= 0) killEnemy(enemy, opts.src);
-  else paintBars(enemy);
 }
 
-function paintBars(enemy) {
+function paintGuestBars(enemy) {
   const barW = enemy.t.boss ? 34 : 22;
   enemy.fill.setAttribute('width', (barW * enemy.hp) / enemy.maxHp);
   enemy.fill.classList.toggle('low', enemy.hp / enemy.maxHp < 0.35);
@@ -321,8 +444,7 @@ function killEnemy(enemy, src) {
   hideTip(enemy);
   if (enemy.friendly) {
     // Summons expire quietly — no bounty, no kill credit, no Blossom chains.
-    enemy.node.classList.add('dying');
-    setTimeout(() => enemy.node.remove(), 300);
+    enemy.fate = 'dying';
     return;
   }
   // Zero Day tier-5 skim: enemy bounties pay +10% while the rig runs that tier.
@@ -334,10 +456,9 @@ function killEnemy(enemy, src) {
   state.earned += payout;
   state.kills += 1;
   if (enemy.t.boss) state.bossesKilled += 1;
-  floatText(x, y - enemy.t.size - 6, `+$${payout}`, 'cash-float');
-  fxRing(x, y, 'fx-ring-red');
-  enemy.node.classList.add('dying');
-  setTimeout(() => enemy.node.remove(), 300);
+  emit('float', x, y - enemy.t.size - 6, `+$${payout}`, 'cash-float');
+  emit('ring', x, y, 'fx-ring-red');
+  enemy.fate = 'dying';
   if (enemy.key === 'bloat' && !enemy.friendly) empPop(x, y); // death rattle — the grid goes dark around the corpse
   corpseBlossomFeed(enemy, x, y, src);
   graveWardenFeed(enemy, x, y);
@@ -353,8 +474,8 @@ function corpseBlossomFeed(enemy, x, y, src) {
     const lvl = trackLevel(tower);
     if (lvl >= 4) {
       tower.lust = (tower.lust || 0) + (effStats(tower).lust || 1);
-      floatText(tower.x, tower.y - 44, `BLOOD LUST ${tower.lust}`, 'lust-float');
-      if (state.panelTower === tower) openTowerPanel(tower); // live lust counter
+      emit('float', tower.x, tower.y - 44, `BLOOD LUST ${tower.lust}`, 'lust-float');
+      if (ui.panelTower === tower) openTowerPanel(tower); // live lust counter
     }
     spawnSummon(enemy, tower, src === 'veins' && lvl >= 2);
   }
@@ -370,7 +491,7 @@ function graveWardenFeed(enemy, x, y) {
     if (Math.hypot(x - tower.x, y - tower.y) > effStats(tower).rng) continue;
     tower.tollCharges = (tower.tollCharges || 0) + 1;
     tower.bellCd = Math.max(0, (tower.bellCd || 0) - 0.4);
-    if (state.panelTower === tower) openTowerPanel(tower); // live toll counter
+    if (ui.panelTower === tower) openTowerPanel(tower); // live toll counter
   }
 }
 
@@ -396,16 +517,8 @@ function spawnSummon(enemy, tower, stained) {
   // rises at 60% of ~50,000, not 60% of its 2,400 paper hull.
   const bonus = stained ? 50 + (es.stainedPct ? Math.round(enemy.maxHp * 0.1) : 0) : 0;
   const hp = Math.max(1, Math.round(enemy.maxHp * (es.summonHp || 0.3)) + bonus);
-  const g = svgNode('g', { class: `enemy e-summon e-${enemy.key}` });
-  const chassis = svgNode('g', { class: 'e-chassis' });
-  for (const node of shapeFor(enemy.key, t)) chassis.appendChild(node);
-  g.appendChild(chassis);
-  const barY = -(t.size + 13);
-  g.appendChild(svgNode('rect', { class: 'hp-bg', x: -11, y: barY, width: 22, height: 3.4 }));
-  const fill = svgNode('rect', { class: 'hp-fill', x: -11, y: barY, width: 22, height: 3.4 });
-  g.appendChild(fill);
   const summon = {
-    key: enemy.key, t, node: g, fill, shieldFill: fill, nid: ++state.nidSeq,
+    key: enemy.key, t, nid: ++state.nidSeq,
     hp, maxHp: hp, shield: 0, maxShield: t.shield || 0,
     pathIdx: enemy.pathIdx, dist: enemy.dist || 0,
     speed: t.speed * 0.85, alive: true, friendly: true, reverse: true,
@@ -423,27 +536,17 @@ function spawnSummon(enemy, tower, stained) {
     summon.fx = px;
     summon.fy = py;
   }
-  g.setAttribute('transform', `translate(${summon.fx.toFixed(1)} ${summon.fy.toFixed(1)})`);
-  const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: summon.fx, cy: summon.fy, r: 6 });
-  state.layers.fx.appendChild(bloom);
-  setTimeout(() => bloom.remove(), 720);
-  g.classList.add('spawn-in');
-  setTimeout(() => g.classList.remove('spawn-in'), 420);
-  state.layers.enemies.appendChild(g);
   state.enemies.push(summon);
-  g.addEventListener('pointerenter', (event) => showSummonTip(summon, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(summon));
-  fxRing(summon.fx, summon.fy, 'fx-ring-virus');
-  floatText(summon.fx, summon.fy - t.size - 10, stained ? 'BLOOD STAINED RISES' : 'RISEN', 'summon-float');
-  paintBars(summon);
+  emit('bloom', summon.fx, summon.fy, 6);
+  emit('ring', summon.fx, summon.fy, 'fx-ring-virus');
+  emit('float', summon.fx, summon.fy - t.size - 10, stained ? 'BLOOD STAINED RISES' : 'RISEN', 'summon-float');
   return summon;
 }
 
 function despawnSummon(summon) {
   summon.alive = false;
-  fxRing(summon.fx, summon.fy, 'fx-ring-virus');
-  summon.node.remove();
+  summon.fate = 'gone';
+  emit('ring', summon.fx, summon.fy, 'fx-ring-virus');
 }
 
 // Summons mow the lane: every hostile they touch takes damage equal to the
@@ -466,8 +569,7 @@ function contactDamage(summon) {
     if (!summon.pierce) { despawnSummon(summon); return; }
     summon.hitLog[enemy.nid] = state.clock;
     summon.hp -= summon.maxHp * 0.25;
-    fxRing(sx, sy, 'fx-ring-virus');
-    paintBars(summon);
+    emit('ring', sx, sy, 'fx-ring-virus');
     if (summon.hp <= 0) { despawnSummon(summon); return; }
   }
 }
@@ -480,7 +582,6 @@ function moveSummon(summon, dt) {
     const [fx, fy] = flightPos(summon, summon.dist);
     summon.fx = fx;
     summon.fy = fy;
-    summon.node.setAttribute('transform', `translate(${fx.toFixed(1)} ${fy.toFixed(1)})`);
     contactDamage(summon);
     return;
   }
@@ -489,7 +590,6 @@ function moveSummon(summon, dt) {
   const [x, y] = state.samplers[summon.pathIdx].at(summon.dist);
   summon.fx = x;
   summon.fy = y;
-  summon.node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
   contactDamage(summon);
 }
 
@@ -522,17 +622,9 @@ function launchStrikeDrone(tower) {
     [aimX, aimY] = state.samplers[prey.pathIdx].at(future);
   }
   const t = { ...ENEMY_TYPES.drone, hp: Math.max(1, Math.round(es.drone || 70)), bounty: 0, dmg: 0, name: 'STRIKE DRONE', ability: 'One-way strike unit — detonates on the first hostile it intercepts.' };
-  const g = svgNode('g', { class: 'enemy e-summon e-drone e-strike' });
-  const chassis = svgNode('g', { class: 'e-chassis' });
-  for (const node of shapeFor('drone', t)) chassis.appendChild(node);
-  g.appendChild(chassis);
-  const barY = -(t.size + 13);
-  g.appendChild(svgNode('rect', { class: 'hp-bg', x: -11, y: barY, width: 22, height: 3.4 }));
-  const fill = svgNode('rect', { class: 'hp-fill', x: -11, y: barY, width: 22, height: 3.4 });
-  g.appendChild(fill);
   const total = Math.max(1, Math.hypot(aimX - tower.x, aimY - tower.y));
   const drone = {
-    key: 'drone', t, node: g, fill, shieldFill: fill, nid: ++state.nidSeq,
+    key: 'drone', t, nid: ++state.nidSeq,
     hp: t.hp, maxHp: t.hp, shield: 0, maxShield: 0,
     pathIdx: prey.pathIdx, dist: 0,
     speed: Math.max(110, t.speed * 1.5), alive: true, friendly: true, reverse: true,
@@ -540,41 +632,33 @@ function launchStrikeDrone(tower) {
     flight: { sx: tower.x, sy: tower.y, tx: aimX, ty: aimY, total },
     fx: tower.x, fy: tower.y,
   };
-  g.setAttribute('transform', `translate(${tower.x.toFixed(1)} ${tower.y.toFixed(1)})`);
-  const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: tower.x, cy: tower.y, r: 6 });
-  state.layers.fx.appendChild(bloom);
-  setTimeout(() => bloom.remove(), 720);
-  state.layers.enemies.appendChild(g);
   state.enemies.push(drone);
-  g.addEventListener('pointerenter', (event) => showSummonTip(drone, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(drone));
-  paintBars(drone);
+  emit('bloom', tower.x, tower.y, 6);
   return true;
 }
 
 function replicateLeak(enemy) {
   enemy.replicated = true;
   const [x, y] = posOf(enemy);
-  fxRing(x, y, 'fx-ring-amber');
+  emit('ring', x, y, 'fx-ring-amber');
   for (let i = 0; i < 6; i++) {
     const spawn = spawnEnemy('file', enemy.pathIdx);
     spawn.dist = Math.min(state.samplers[enemy.pathIdx].len - 8, Math.max(0, enemy.dist - 18 + i * 7));
   }
-  banner('MEMORY LEAK', '// REPLICATION — HOSTILES SPILLED', 'banner-red');
+  emit('banner', 'MEMORY LEAK', '// REPLICATION — HOSTILES SPILLED', 'banner-red');
 }
 
 function leakEnemy(enemy) {
   enemy.alive = false;
   hideTip(enemy);
-  enemy.node.remove();
+  enemy.fate = 'gone';
   const leakDmg = leakDamage(enemy);
   state.baseHp = Math.max(0, state.baseHp - leakDmg);
   board.classList.remove('core-hit');
   void board.offsetWidth;
   board.classList.add('core-hit');
   setTimeout(() => board.classList.remove('core-hit'), 550);
-  floatText(...corePos(), `-${leakDmg} CORE`, 'core-float');
+  emit('float', ...corePos(), `-${leakDmg} CORE`, 'core-float');
   updateHud();
   if (enemy.t.boss) updateBossBar();
   if (state.baseHp <= 0 && state.mode === 'waves') endMission(false);
@@ -605,7 +689,7 @@ function flightPos(enemy, progress) {
 // --- FX -------------------------------------------------------------------------------
 function fxRing(x, y, cls) {
   const ring = svgNode('circle', { class: `fx-ring ${cls}`, cx: x, cy: y, r: 6 });
-  state.layers.fx.appendChild(ring);
+  ui.layers.fx.appendChild(ring);
   setTimeout(() => ring.remove(), 650);
 }
 
@@ -619,19 +703,19 @@ function fxNukeBlast(x, y) {
   for (const [cls, delay] of [['fx-nuke-ring', 0], ['fx-nuke-ring slow', 150]]) {
     setTimeout(() => {
       const ring = svgNode('circle', { class: `fx-ring ${cls}`, cx: x, cy: y, r: 10 });
-      state.layers.fx.appendChild(ring);
+      ui.layers.fx.appendChild(ring);
       setTimeout(() => ring.remove(), 1400);
     }, delay);
   }
-  fxRing(x, y, 'fx-ring-red');
+  emit('ring', x, y, 'fx-ring-red');
 }
 
 // Blood Purge: crimson shockwave swells to the full curse radius.
 function fxPurgeBlast(tower) {
   const ring = svgNode('circle', { class: 'fx-ring fx-purge-ring', cx: tower.x, cy: tower.y, r: 8 });
-  state.layers.fx.appendChild(ring);
+  ui.layers.fx.appendChild(ring);
   setTimeout(() => ring.remove(), 950);
-  fxRing(tower.x, tower.y, 'fx-ring-virus');
+  emit('ring', tower.x, tower.y, 'fx-ring-virus');
 }
 
 // Blood Scream: screen-edge crimson vignette + every enraged summon shudders.
@@ -642,30 +726,45 @@ function fxScreamBlast(tower, buffed) {
   setTimeout(() => vignette.remove(), 1100);
   for (const summon of state.enemies) {
     if (!summon.alive || !summon.friendly) continue;
-    summon.node.classList.add('screamed-flash');
-    setTimeout(() => summon.node.classList.remove('screamed-flash'), 900);
+    emit('flash', summon);
   }
-  fxRing(tower.x, tower.y, 'fx-ring-virus');
+  emit('ring', tower.x, tower.y, 'fx-ring-virus');
 }
 
 function floatText(x, y, text, cls) {
   const label = svgNode('text', { class: `float-text ${cls}`, x, y, 'text-anchor': 'middle' }, text);
-  state.layers.fx.appendChild(label);
+  ui.layers.fx.appendChild(label);
   setTimeout(() => label.remove(), 950);
 }
 
+view.bloom = (x, y, r) => { const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: x, cy: y, r }); ui.layers.fx.appendChild(bloom); setTimeout(() => bloom.remove(), 720); };
+view.flash = (summon) => { const v = enemyViews.get(summon.nid); if (!v) return; v.g.classList.add('screamed-flash'); setTimeout(() => v.g.classList.remove('screamed-flash'), 900); };
+Object.assign(view, { ring: fxRing, float: floatText, banner, sound: (...a) => playSound(...a), nuke: fxNukeBlast, purge: fxPurgeBlast, scream: fxScreamBlast });
+
 // --- Main loop ------------------------------------------------------------------------
 function tick(ts) {
-  state.raf = requestAnimationFrame(tick);
-  let dt = Math.min(0.05, (ts - state.last) / 1000 || 0);
-  state.last = ts;
+  ui.raf = requestAnimationFrame(tick);
+  let dt = Math.min(0.05, (ts - ui.last) / 1000 || 0);
+  ui.last = ts;
   if (state.speed2x) dt *= 2; // OVERDRIVE perk: the whole sim runs at double tempo
+  if (coopGuest()) { state.clock += dt; guestFrame(dt); return; }
+  simStep(dt);
+  renderProjectiles();
+  renderEnemies();
+  renderTowers();
+  if (coopHost()) {
+    state.syncT -= dt;
+    if (state.syncT <= 0) { state.syncT = 0.12; coopBroadcast(); }
+  }
+}
+
+// One fixed-or-variable sim step: no requestAnimationFrame, no clock reads, no view calls. A host can call it with a fixed dt.
+function simStep(dt) {
   state.clock += dt;
-  if (coopGuest()) { guestFrame(dt); return; }
   if (state.mode === 'countdown') {
     state.countdown -= dt;
     const n = Math.ceil(state.countdown);
-    if (n !== state.lastCount && n > 0) { state.lastCount = n; banner(String(n), '// DEPLOYING', 'banner-count'); playSound(); }
+    if (n !== state.lastCount && n > 0) { state.lastCount = n; emit('banner', String(n), '// DEPLOYING', 'banner-count'); emit('sound'); }
     if (state.countdown <= 0) beginWave(debugWave > 0 ? Math.min(missionWaves().length - 1, debugWave - 1) : 0);
   }
   if (state.mode === 'waves') runWaves(dt);
@@ -674,10 +773,6 @@ function tick(ts) {
   state.enemies = state.enemies.filter((enemy) => enemy.alive);
   updateTowers(dt);
   updateProjectiles(dt);
-  if (coopHost()) {
-    state.syncT -= dt;
-    if (state.syncT <= 0) { state.syncT = 0.12; coopBroadcast(); }
-  }
 }
 
 // RAMPAGE UNIT: berserk drive — the lower the hull, the higher the speed.
@@ -687,16 +782,16 @@ function enrageMult(enemy) {
 }
 
 function empPop(x, y) {
-  fxRing(x, y, 'fx-ring-emp');
+  emit('ring', x, y, 'fx-ring-emp');
   let hit = 0;
   for (const tower of state.towers) {
     if (Math.hypot(tower.x - x, tower.y - y) <= BLOAT_EMP_RADIUS) {
       tower.offlineT = Math.max(tower.offlineT || 0, BLOAT_EMP_SECONDS);
-      fxRing(tower.x, tower.y, 'fx-ring-emp');
+      emit('ring', tower.x, tower.y, 'fx-ring-emp');
       hit += 1;
     }
   }
-  if (hit) floatText(x, y - 20, `EMP POP — ${hit} OFFLINE`, 'emp-float');
+  if (hit) emit('float', x, y - 20, `EMP POP — ${hit} OFFLINE`, 'emp-float');
 }
 
 function moveEnemy(enemy, dt) {
@@ -704,10 +799,8 @@ function moveEnemy(enemy, dt) {
   if (debugFreeze || state.mode !== 'waves') return;
   if (enemy.stun > 0) {
     enemy.stun -= dt;
-    enemy.node.classList.add('e-stunned');
     return;
   }
-  enemy.node.classList.remove('e-stunned');
   if (enemy.tarT) enemy.tarT -= dt; // tar slick linger decays fast
   if (enemy.corrupt && enemy.corrupt.t > 0) {
     // VIRUS CONTAGION: phase burn ticks every frame; kills credit the strain.
@@ -726,18 +819,17 @@ function moveEnemy(enemy, dt) {
     const heading = (Math.atan2(fy - py, fx - px) * 180) / Math.PI;
     enemy.fx = fx;
     enemy.fy = fy;
-    enemy.node.setAttribute('transform', `translate(${fx.toFixed(1)} ${fy.toFixed(1)}) rotate(${heading.toFixed(1)})`);
+    enemy.angle = heading;
     return;
   }
   const haste = inHasteZone(enemy.pathIdx, enemy.dist) ? 1.3 : 1;
-  enemy.node.classList.toggle('e-haste', haste > 1);
+  enemy.hasted = haste > 1;
   if (enemy.t.boss && enemy.key === 'virus') {
     enemy.pulseTimer -= dt;
-    if (enemy.pulseTimer <= 0) { enemy.pulseTimer = 8; fxRing(...posOf(enemy), 'fx-ring-virus'); }
+    if (enemy.pulseTimer <= 0) { enemy.pulseTimer = 8; emit('ring', ...posOf(enemy), 'fx-ring-virus'); }
   }
   if (enemy.t.regen && enemy.hp < enemy.maxHp) {
     enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * enemy.t.regen * dt);
-    paintBars(enemy);
   }
   // NULL SPECTRE: phase shroud cycles — cloaked spans drop every targeting lock.
   if (enemy.t.cloak) {
@@ -745,9 +837,8 @@ function moveEnemy(enemy, dt) {
     if (enemy.cloakT <= 0) {
       enemy.cloaked = !enemy.cloaked;
       enemy.cloakT = enemy.cloaked ? enemy.t.cloak.span : enemy.t.cloak.every;
-      fxRing(...posOf(enemy), 'fx-ring-phantom');
+      emit('ring', ...posOf(enemy), 'fx-ring-phantom');
     }
-    enemy.node.classList.toggle('e-cloak', Boolean(enemy.cloaked));
   }
   // DATA LEECH: siphon field — every second, hostiles near the leech knit hull back.
   if (enemy.t.heal) {
@@ -760,30 +851,29 @@ function moveEnemy(enemy, dt) {
         const [ox, oy] = posOf(other);
         if (Math.hypot(ox - enemy.fx, oy - enemy.fy) <= enemy.t.heal.radius) {
           other.hp = Math.min(other.maxHp, other.hp + other.maxHp * enemy.t.heal.pct);
-          paintBars(other);
           healed += 1;
         }
       }
-      if (healed) { fxRing(enemy.fx, enemy.fy, 'fx-ring-heal'); floatText(enemy.fx, enemy.fy - enemy.t.size - 8, `SIPHON +${healed}`, 'heal-float'); }
+      if (healed) { emit('ring', enemy.fx, enemy.fy, 'fx-ring-heal'); emit('float', enemy.fx, enemy.fy - enemy.t.size - 8, `SIPHON +${healed}`, 'heal-float'); }
     }
   }
   if (enemy.t.blink) {
     enemy.blinkTimer = (enemy.blinkTimer === undefined ? enemy.t.blink.every : enemy.blinkTimer) - dt;
     if (enemy.blinkTimer <= 0) {
       enemy.blinkTimer = enemy.t.blink.every;
-      fxRing(...posOf(enemy), 'fx-ring-phantom');
+      emit('ring', ...posOf(enemy), 'fx-ring-phantom');
       enemy.dist += enemy.t.blink.jump;
     }
   }
   if (enemy.t.boss && enemy.key === 'warden' && !enemy.stormed && enemy.hp <= enemy.maxHp * 0.6) {
     enemy.stormed = true;
     const lane = state.samplers[enemy.pathIdx];
-    fxRing(...posOf(enemy), 'fx-ring-amber');
+    emit('ring', ...posOf(enemy), 'fx-ring-amber');
     for (let i = 0; i < 4; i++) {
       const spawn = spawnEnemy('hexbug', enemy.pathIdx);
       spawn.dist = Math.min(lane.len - 8, Math.max(0, enemy.dist - 18 + i * 9));
     }
-    banner('FIREWALL WARDEN', '// PACKET STORM — HEX CRAWLERS SPILLED', 'banner-red');
+    emit('banner', 'FIREWALL WARDEN', '// PACKET STORM — HEX CRAWLERS SPILLED', 'banner-red');
   }
   enemy.dist = Math.max(0, enemy.dist - (enemy.pull || 0) * dt);
   enemy.dist += enemy.speed * haste * enrageMult(enemy) * wardenYardMult(enemy) * tarMult(enemy) * (1 - (enemy.slow || 0)) * (1 - (enemy.gravSlow || 0)) * dt;
@@ -792,12 +882,12 @@ function moveEnemy(enemy, dt) {
     if (enemy.usedGates.has(event.index)) continue;
     if (event.from.pathIdx === enemy.pathIdx && enemy.dist >= event.from.dist) {
       const [gx, gy] = [event.gate.x, event.gate.y];
-      fxRing(gx, gy, 'fx-ring-gate');
+      emit('ring', gx, gy, 'fx-ring-gate');
       enemy.pathIdx = event.to.pathIdx;
       enemy.dist = event.to.dist + 2;
       enemy.usedGates.add(event.index);
-      fxRing(event.gate.toX, event.gate.toY, 'fx-ring-gate');
-      playSound('hover');
+      emit('ring', event.gate.toX, event.gate.toY, 'fx-ring-gate');
+      emit('sound', 'hover');
       return moveEnemy(enemy, 0);
     }
   }
@@ -806,7 +896,6 @@ function moveEnemy(enemy, dt) {
   const [px, py] = sampler.at(Math.max(0, enemy.dist - 6));
   const angle = (Math.atan2(y - py, x - px) * 180) / Math.PI;
   if (Math.abs(angle - enemy.angle) > 1) enemy.angle = angle;
-  enemy.node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})${enemy.key === 'runner' ? ` rotate(${enemy.angle.toFixed(1)})` : ''}`);
 }
 
 function runWaves(dt) {
@@ -816,7 +905,6 @@ function runWaves(dt) {
       const key = state.queue.shift();
       const enemy = spawnEnemy(key, state.spawnSide++ % state.samplers.length);
       state.spawnGap = SPAWN_GAP[key] || 0.8;
-      paintBars(enemy);
     }
   } else if (!state.enemies.some((enemy) => enemy.alive && !enemy.friendly) && state.intermission <= 0) {
     // Income pass: cleared waves pay build money. Rates trimmed — the upgrade
@@ -828,7 +916,7 @@ function runWaves(dt) {
       const income = effStats(tower).income || 0;
       if (!income) continue;
       rigYield += income;
-      floatText(tower.x, tower.y - 40, `+$${income} RIG`, 'cash-float');
+      emit('float', tower.x, tower.y - 40, `+$${income} RIG`, 'cash-float');
     }
     // WAR BONDS: the war chest compounds — interest rolls INTO the bond itself
     // (it never touches the wallet until the commander withdraws).
@@ -840,8 +928,8 @@ function runWaves(dt) {
       const interest = Math.min(Math.max(0, cap - tower.bank), Math.round(tower.bank * es.bond));
       if (interest <= 0) continue;
       tower.bank += interest;
-      floatText(tower.x, tower.y - 40, `+$${interest} BOND`, 'cash-float');
-      if (state.panelTower === tower) openTowerPanel(tower);
+      emit('float', tower.x, tower.y - 40, `+$${interest} BOND`, 'cash-float');
+      if (ui.panelTower === tower) openTowerPanel(tower);
     }
     const hardMult = state.protocol === 'hard' ? 0.85 : state.protocol === 'insane' ? 0.7 : state.protocol === 'crimson' ? 0.7 : 1; // HELL PAYS WORSE — salvage is blood in HARD, the DOUBLED SPIRAL pays 70%, and the dawn bleeds you for 70%
     const bonus = Math.round((30 + (state.waveIndex + 1) * 7) * hardMult) + rigYield;
@@ -850,11 +938,11 @@ function runWaves(dt) {
     const cleared = state.waveIndex + 1;
     if (window.CBZPerks && CBZPerks.has('fieldrep') && state.baseHp < BASE_MAX) {
       state.baseHp = Math.min(BASE_MAX, state.baseHp + 2);
-      floatText(...corePos(), '+2 FIELD REPAIRS', 'repair-float');
+      emit('float', ...corePos(), '+2 FIELD REPAIRS', 'repair-float');
     }
     if (cleared >= missionWaves().length) { endMission(true); return; }
-    banner(`WAVE ${cleared} CLEARED`, rigYield ? `// +$${bonus} SALVAGE · RIG YIELD $${rigYield}` : `// +$${bonus} SALVAGE`, 'banner-green');
-    playSound();
+    emit('banner', `WAVE ${cleared} CLEARED`, rigYield ? `// +$${bonus} SALVAGE · RIG YIELD $${rigYield}` : `// +$${bonus} SALVAGE`, 'banner-green');
+    emit('sound');
     state.intermission = state.protocol === 'crimson' ? 3 : state.protocol === 'insane' ? 2.5 : state.protocol === 'hard' ? 4.5 : 7; // HARD: 4.5s to rebuild — the swarm never waits. DOUBLED INSANE: 2.5s. CRIMSON: 3s
     updateHud();
   }
@@ -888,37 +976,37 @@ function beginWave(index) {
   state.queue = queue;
   state.spawnGap = 0;
   state.spawnSide = 0;
-  banner(`WAVE ${String(index + 1).padStart(2, '0')} / ${waves.length}`, surge ? `// ${surge.label} — ${surge.note}` : wave.phase ? `// ${wave.phase}` : '// HOSTILES INBOUND', 'banner-wave');
+  emit('banner', `WAVE ${String(index + 1).padStart(2, '0')} / ${waves.length}`, surge ? `// ${surge.label} — ${surge.note}` : wave.phase ? `// ${wave.phase}` : '// HOSTILES INBOUND', 'banner-wave');
   updateHud();
 }
 
 // --- Combat HUD -----------------------------------------------------------------------
 function ensureHud() {
-  if (!state.hud) {
-    state.hud = document.createElement('div');
-    state.hud.className = 'combat-hud';
-    state.hud.innerHTML = `
+  if (!ui.hud) {
+    ui.hud = document.createElement('div');
+    ui.hud.className = 'combat-hud';
+    ui.hud.innerHTML = `
       <div class="hud-block hud-wave"><span class="hud-label">WAVE</span><strong id="combat-wave">—</strong></div>
       <div class="hud-block hud-protocol"><span class="hud-label">PROTOCOL</span><strong id="combat-protocol">—</strong></div>
       <div class="hud-block hud-base"><span class="hud-label">BASE INTEGRITY</span><div class="base-track"><div class="base-fill" id="base-fill"></div></div><b id="base-num">100</b></div>
       <div class="hud-block hud-cash"><span class="hud-label">SALVAGE</span><strong id="combat-cash">$0</strong></div>`;
-    if (!state.bossBar) {
-      state.bossBar = document.createElement('div');
-      state.bossBar.className = 'boss-bar';
-      state.bossBar.hidden = true;
-      state.bossBar.innerHTML = `<span class="hud-label" id="boss-name">BOSS</span><div class="boss-track"><div class="boss-fill" id="boss-fill"></div><div class="boss-shield" id="boss-shield"></div></div>`;
-      battlefield.appendChild(state.bossBar);
+    if (!ui.bossBar) {
+      ui.bossBar = document.createElement('div');
+      ui.bossBar.className = 'boss-bar';
+      ui.bossBar.hidden = true;
+      ui.bossBar.innerHTML = `<span class="hud-label" id="boss-name">BOSS</span><div class="boss-track"><div class="boss-fill" id="boss-fill"></div><div class="boss-shield" id="boss-shield"></div></div>`;
+      battlefield.appendChild(ui.bossBar);
     }
   }
   const exit = document.querySelector('#exit-battle');
   const deploy = document.querySelector('#deploy-mission');
-  state.deployBtn = deploy;
+  ui.deployBtn = deploy;
   exit.textContent = 'ABORT MISSION';
   exit.classList.add('aborting');
   deploy.hidden = true;
-  document.querySelector('.field-hud').insertBefore(state.hud, exit);
+  document.querySelector('.field-hud').insertBefore(ui.hud, exit);
   // OVERDRIVE perk: TIME x2 toggle — only rendered once the achievement decrypts it.
-  if (!state.speedBtn && window.CBZPerks && CBZPerks.has('overdrive')) {
+  if (!ui.speedBtn && window.CBZPerks && CBZPerks.has('overdrive')) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'speed-toggle';
@@ -927,41 +1015,41 @@ function ensureHud() {
       state.speed2x = !state.speed2x;
       btn.textContent = state.speed2x ? 'TIME x2' : 'TIME x1';
       btn.classList.toggle('on', state.speed2x);
-      playSound();
+      emit('sound');
     });
-    state.speedBtn = btn;
+    ui.speedBtn = btn;
   }
-  if (state.speedBtn) {
+  if (ui.speedBtn) {
     state.speed2x = false;
-    state.speedBtn.textContent = 'TIME x1';
-    state.speedBtn.classList.remove('on');
-    document.querySelector('.field-hud').insertBefore(state.speedBtn, exit);
+    ui.speedBtn.textContent = 'TIME x1';
+    ui.speedBtn.classList.remove('on');
+    document.querySelector('.field-hud').insertBefore(ui.speedBtn, exit);
   }
   // Nuclear Fall Out: strike button lives next to the time toggle once a rig deploys.
-  if (!state.nukeBtn) {
+  if (!ui.nukeBtn) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'nuke-toggle';
     btn.hidden = true;
     btn.addEventListener('click', () => {
       const rig = readyRig();
-      if (!rig) { playSound('alarm'); showToast('Nuclear strike needs the rig at Tier 6 — Nuclear Fall Out.'); return; }
-      if (state.nukeAim) { setNukeAim(false); return; }
-      if ((rig.nukeCd || 0) > 0) { playSound('alarm'); showToast(`Nuke recharging — ${Math.ceil(rig.nukeCd)}s left.`); return; }
-      if (state.cash < NUKE_COST) { playSound('alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); return; }
+      if (!rig) { emit('sound', 'alarm'); showToast('Nuclear strike needs the rig at Tier 6 — Nuclear Fall Out.'); return; }
+      if (ui.nukeAim) { setNukeAim(false); return; }
+      if ((rig.nukeCd || 0) > 0) { emit('sound', 'alarm'); showToast(`Nuke recharging — ${Math.ceil(rig.nukeCd)}s left.`); return; }
+      if (state.cash < NUKE_COST) { emit('sound', 'alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); return; }
       setNukeAim(true);
-      playSound();
+      emit('sound');
     });
-    state.nukeBtn = btn;
+    ui.nukeBtn = btn;
   }
-  state.nukeAim = false;
-  if (state.crosshair) { state.crosshair.remove(); state.crosshair = null; }
+  ui.nukeAim = false;
+  if (ui.crosshair) { ui.crosshair.remove(); ui.crosshair = null; }
   paintNukeButton();
-  document.querySelector('.field-hud').insertBefore(state.nukeBtn, exit);
+  document.querySelector('.field-hud').insertBefore(ui.nukeBtn, exit);
 }
 
 function updateHud() {
-  if (!state.hud) return;
+  if (!ui.hud) return;
   document.querySelector('#combat-wave').textContent = state.waveIndex < 0 ? '—' : `${String(state.waveIndex + 1).padStart(2, '0')}/${missionWaves().length}`;
   document.querySelector('#combat-cash').textContent = `$${state.cash}`;
   const fill = document.querySelector('#base-fill');
@@ -998,42 +1086,42 @@ function readyRig() {
 }
 
 function setNukeAim(on) {
-  state.nukeAim = Boolean(on);
-  if (state.crosshair) { state.crosshair.remove(); state.crosshair = null; }
-  if (state.nukeAim) {
+  ui.nukeAim = Boolean(on);
+  if (ui.crosshair) { ui.crosshair.remove(); ui.crosshair = null; }
+  if (ui.nukeAim) {
     setBuilding(null);
-    state.crosshair = svgNode('g', { class: 'nuke-crosshair' });
-    state.crosshair.appendChild(svgNode('circle', { class: 'nuke-blast', r: NUKE_RADIUS }));
-    state.crosshair.appendChild(svgNode('circle', { class: 'nuke-waste', r: WASTE_RADIUS }));
+    ui.crosshair = svgNode('g', { class: 'nuke-crosshair' });
+    ui.crosshair.appendChild(svgNode('circle', { class: 'nuke-blast', r: NUKE_RADIUS }));
+    ui.crosshair.appendChild(svgNode('circle', { class: 'nuke-waste', r: WASTE_RADIUS }));
     const label = svgNode('text', { class: 'nuke-label', y: -NUKE_RADIUS - 12, 'text-anchor': 'middle' }, 'NUCLEAR FALL OUT');
-    state.crosshair.appendChild(label);
-    state.layers.fx.appendChild(state.crosshair);
-    paintGhost(state.mouseX, state.mouseY);
+    ui.crosshair.appendChild(label);
+    ui.layers.fx.appendChild(ui.crosshair);
+    paintGhost(ui.mouseX, ui.mouseY);
   }
-  if (state.nukeBtn) paintNukeButton();
+  if (ui.nukeBtn) paintNukeButton();
 }
 
 function paintNukeButton() {
-  if (!state.nukeBtn) return;
+  if (!ui.nukeBtn) return;
   const rig = state.towers.find((tower) => tower.id === 'zeroday') || null;
   const armed = readyRig();
-  state.nukeBtn.hidden = !rig;
-  state.nukeBtn.disabled = Boolean(rig) && !armed; // visible the moment a rig deploys — locked until Tier 6
+  ui.nukeBtn.hidden = !rig;
+  ui.nukeBtn.disabled = Boolean(rig) && !armed; // visible the moment a rig deploys — locked until Tier 6
   if (!rig) return;
   const cd = armed ? (armed.nukeCd || 0) : 0;
-  state.nukeBtn.textContent = state.nukeAim ? 'CLICK TARGET — ESC CANCELS'
+  ui.nukeBtn.textContent = ui.nukeAim ? 'CLICK TARGET — ESC CANCELS'
     : !armed ? 'NUKE — RIG TIER 6 REQUIRED'
     : cd > 0 ? `NUKE ${Math.ceil(cd)}s`
     : `NUKE READY — $${NUKE_COST}`;
-  state.nukeBtn.classList.toggle('on', state.nukeAim);
-  state.nukeBtn.classList.toggle('cd', cd > 0 && !state.nukeAim);
-  state.nukeBtn.classList.toggle('lock', Boolean(rig) && !armed);
+  ui.nukeBtn.classList.toggle('on', ui.nukeAim);
+  ui.nukeBtn.classList.toggle('cd', cd > 0 && !ui.nukeAim);
+  ui.nukeBtn.classList.toggle('lock', Boolean(rig) && !armed);
 }
 
 function fireNuke(x, y) {
   const rig = readyRig();
   if (!rig || (rig.nukeCd || 0) > 0) { setNukeAim(false); return; }
-  if (state.cash < NUKE_COST) { playSound('alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); setNukeAim(false); return; }
+  if (state.cash < NUKE_COST) { emit('sound', 'alarm'); showToast(`Need $${NUKE_COST} salvage to call the nuke.`); setNukeAim(false); return; }
   state.cash -= NUKE_COST;
   rig.nukeCd = NUKE_COOLDOWN;
   setNukeAim(false);
@@ -1044,11 +1132,11 @@ function fireNuke(x, y) {
     if (Math.hypot(px - x, py - y) <= NUKE_RADIUS) damageEnemy(enemy, NUKE_DAMAGE, { src: 'nuke', friendlyFire: true });
   }
   const node = svgNode('circle', { class: 'fx-waste', cx: x, cy: y, r: WASTE_RADIUS });
-  state.layers.fx.appendChild(node);
+  ui.layers.fx.appendChild(node);
   state.wasteZones.push({ x, y, r: WASTE_RADIUS, until: state.clock + WASTE_SECONDS, node });
-  fxNukeBlast(x, y);
-  floatText(x, y - NUKE_RADIUS - 20, 'NUCLEAR FALL OUT', 'core-float');
-  playSound('alarm');
+  emit('nuke', x, y);
+  emit('float', x, y - NUKE_RADIUS - 20, 'NUCLEAR FALL OUT', 'core-float');
+  emit('sound', 'alarm');
   updateHud();
 }
 
@@ -1056,7 +1144,7 @@ function fireNuke(x, y) {
 function bloodPurge(tower) {
   if (trackLevel(tower) < 4) return;
   const lust = tower.lust || 0;
-  if (lust <= 0) { playSound('alarm'); showToast('Blood Lust bar is empty — kills feed it.'); return; }
+  if (lust <= 0) { emit('sound', 'alarm'); showToast('Blood Lust bar is empty — kills feed it.'); return; }
   const rng = effStats(tower).rng;
   let hits = 0;
   for (const enemy of state.enemies) {
@@ -1065,9 +1153,9 @@ function bloodPurge(tower) {
     if (Math.hypot(px - tower.x, py - tower.y) <= rng) { damageEnemy(enemy, lust, { src: 'purge' }); hits += 1; }
   }
   tower.lust = 0;
-  fxPurgeBlast(tower);
-  floatText(tower.x, tower.y - 52, `BLOOD PURGE — ${lust} DMG`, 'lust-float');
-  playSound();
+  emit('purge', tower);
+  emit('float', tower.x, tower.y - 52, `BLOOD PURGE — ${lust} DMG`, 'lust-float');
+  emit('sound');
   openTowerPanel(tower);
   updateHud();
 }
@@ -1082,20 +1170,19 @@ function bloodScream(tower) {
     summon.hp *= 2;
     summon.speed *= 2.5;
     summon.screamed = true;
-    paintBars(summon);
     buffed += 1;
   }
   tower.screamCd = 200;
-  fxScreamBlast(tower, buffed);
-  banner('BLOOD SCREAM', buffed ? `// ${buffed} SUMMONS ENRAGED — 2x HP · +150% SPEED` : '// NO SUMMONS ON THE FIELD', 'banner-red');
-  playSound();
+  emit('scream', tower, buffed);
+  emit('banner', 'BLOOD SCREAM', buffed ? `// ${buffed} SUMMONS ENRAGED — 2x HP · +150% SPEED` : '// NO SUMMONS ON THE FIELD', 'banner-red');
+  emit('sound');
   openTowerPanel(tower);
 }
 
 function updateBossBar() {
   const boss = state.enemies.find((enemy) => enemy.alive && enemy.t.boss && !enemy.friendly);
-  state.bossBar.hidden = !boss;
-  state.bossBar.style.display = boss ? '' : 'none';
+  ui.bossBar.hidden = !boss;
+  ui.bossBar.style.display = boss ? '' : 'none';
   if (!boss) return;
   document.querySelector('#boss-name').textContent = `${boss.t.tag} // ${boss.t.name}`;
   document.querySelector('#boss-fill').style.width = `${(boss.hp / boss.maxHp) * 100}%`;
@@ -1104,19 +1191,19 @@ function updateBossBar() {
 
 // --- Enemy hover tooltip ----------------------------------------------------------------
 function ensureTip() {
-  if (state.tip) return;
-  state.tip = document.createElement('div');
-  state.tip.className = 'enemy-tip';
-  state.tip.hidden = true;
-  battlefield.appendChild(state.tip);
+  if (ui.tip) return;
+  ui.tip = document.createElement('div');
+  ui.tip.className = 'enemy-tip';
+  ui.tip.hidden = true;
+  battlefield.appendChild(ui.tip);
 }
 
 function showTip(enemy, event) {
   ensureTip();
-  state.tipTarget = enemy;
+  ui.tipTarget = enemy;
   const t = enemy.t;
   const armor = t.armor ? `${Math.round(t.armor * 100)}% PLATE` : 'NONE';
-  state.tip.innerHTML = `
+  ui.tip.innerHTML = `
     <div class="tip-head"><b>${t.name}</b><span class="tip-tag">${t.tag}</span></div>
     <div class="tip-hp"><div class="tip-hp-track"><div class="tip-hp-fill" style="width:${(enemy.hp / enemy.maxHp) * 100}%"></div></div><span>${Math.ceil(enemy.hp)}/${enemy.maxHp} HP${enemy.shield > 0 ? ` +${Math.ceil(enemy.shield)} SHLD` : ''}</span></div>
     <div class="tip-rows">
@@ -1126,26 +1213,26 @@ function showTip(enemy, event) {
       <div><span>BOUNTY</span><b>$${t.bounty}</b></div>
     </div>
     <p class="tip-ability">${t.ability}</p>`;
-  state.tip.hidden = false;
+  ui.tip.hidden = false;
   moveTip(event);
 }
 
 function moveTip(event) {
-  if (!state.tip || state.tip.hidden) return;
+  if (!ui.tip || ui.tip.hidden) return;
   const pad = 16;
-  const x = event ? event.clientX : state.mouseX || 100;
-  const y = event ? event.clientY : state.mouseY || 100;
-  state.mouseX = x;
-  state.mouseY = y;
-  const wide = state.tip.offsetWidth || 240;
-  state.tip.style.left = `${Math.min(window.innerWidth - wide - 10, x + pad)}px`;
-  state.tip.style.top = `${Math.max(10, y - state.tip.offsetHeight - pad)}px`;
+  const x = event ? event.clientX : ui.mouseX || 100;
+  const y = event ? event.clientY : ui.mouseY || 100;
+  ui.mouseX = x;
+  ui.mouseY = y;
+  const wide = ui.tip.offsetWidth || 240;
+  ui.tip.style.left = `${Math.min(window.innerWidth - wide - 10, x + pad)}px`;
+  ui.tip.style.top = `${Math.max(10, y - ui.tip.offsetHeight - pad)}px`;
 }
 
 function hideTip(enemy) {
-  if (!state.tip || (enemy && state.tipTarget !== enemy)) return;
-  state.tip.hidden = true;
-  state.tipTarget = null;
+  if (!ui.tip || (enemy && ui.tipTarget !== enemy)) return;
+  ui.tip.hidden = true;
+  ui.tipTarget = null;
 }
 
 // Friendly intel — Blossom risen copies and strike drones get their own readout.
@@ -1153,16 +1240,16 @@ function hideTip(enemy) {
 // name, tag and the live hull. No allegiance chatter, no payload rows.
 function showSummonTip(summon, event) {
   ensureTip();
-  state.tipTarget = summon;
+  ui.tipTarget = summon;
   const t = summon.t;
   const soul = summon.key === 'soul';
   const drone = summon.key === 'drone';
   const head = soul ? 'VENGEFUL SOUL' : drone ? 'STRIKE DRONE' : `RISEN ${t.name}`;
   const tag = soul ? 'GRAVE WARDEN CHOIR' : drone ? 'DRONE SPAWNER PAYLOAD' : 'CORPSE BLOSSOM SPAWN';
-  state.tip.innerHTML = `
+  ui.tip.innerHTML = `
     <div class="tip-head summon"><b>${head}</b><span class="tip-tag">${tag}</span></div>
     <div class="tip-hp"><div class="tip-hp-track"><div class="tip-hp-fill" style="width:${(summon.hp / summon.maxHp) * 100}%"></div></div><span>${Math.ceil(summon.hp)}/${summon.maxHp} HP</span></div>`;
-  state.tip.hidden = false;
+  ui.tip.hidden = false;
   moveTip(event);
 }
 
@@ -1170,17 +1257,17 @@ function showSummonTip(summon, event) {
 function banner(title, sub, cls) {
   state.syncTitle = String(title || '');
   state.syncSeq = (state.syncSeq || 0) + 1;
-  if (!state.banner) {
-    state.banner = document.createElement('div');
-    state.banner.className = 'wave-banner';
-    battlefield.appendChild(state.banner);
+  if (!ui.banner) {
+    ui.banner = document.createElement('div');
+    ui.banner.className = 'wave-banner';
+    battlefield.appendChild(ui.banner);
   }
-  state.banner.className = `wave-banner ${cls || 'banner-wave'}`;
-  state.banner.innerHTML = `<strong>${title}</strong>${sub ? `<span>${sub}</span>` : ''}`;
-  void state.banner.offsetWidth;
-  state.banner.classList.add('show');
-  clearTimeout(state.bannerTimer);
-  state.bannerTimer = setTimeout(() => state.banner.classList.remove('show'), 2100);
+  ui.banner.className = `wave-banner ${cls || 'banner-wave'}`;
+  ui.banner.innerHTML = `<strong>${title}</strong>${sub ? `<span>${sub}</span>` : ''}`;
+  void ui.banner.offsetWidth;
+  ui.banner.classList.add('show');
+  clearTimeout(ui.bannerTimer);
+  ui.bannerTimer = setTimeout(() => ui.banner.classList.remove('show'), 2100);
 }
 
 // --- Mode vote (EASY + MEDIUM live, the rest coming soon) --------------------------------
@@ -1210,20 +1297,20 @@ function showVote(context) {
       <button class="inline-button" id="vote-cancel" type="button">CANCEL</button>
     </div>`;
   battlefield.appendChild(panel);
-  state.votePanel = panel;
+  ui.votePanel = panel;
   panel.querySelector('#vote-cancel').addEventListener('click', () => { closeVote(); restoreRecon(); });
   panel.querySelectorAll('.mode-card:not(.locked)').forEach((card) => card.addEventListener('click', () => castVote(card.dataset.mode)));
-  playSound();
+  emit('sound');
 }
 
 function castVote(mode) {
-  playSound();
+  emit('sound');
   state.myVote = mode;
   launchCombat(mode);
 }
 
 function closeVote() {
-  if (state.votePanel) { state.votePanel.remove(); state.votePanel = null; }
+  if (ui.votePanel) { ui.votePanel.remove(); ui.votePanel = null; }
 }
 
 // --- Mission lifecycle ------------------------------------------------------------------
@@ -1243,9 +1330,9 @@ function startMission(map, skipVote = false, forcedProtocol = null) {
   state.towers = [];
   state.projectiles = [];
   state.wasteZones = [];
-  state.nukeAim = false;
+  ui.nukeAim = false;
   state.bonusNc = 0;
-  state.building = null;
+  ui.building = null;
   state.kills = 0;
   state.bossesKilled = 0;
   state.earned = 0;
@@ -1276,9 +1363,9 @@ function launchCombat(mode) {
   state.mode = 'countdown';
   state.countdown = 3.4;
   state.lastCount = 4;
-  state.last = performance.now();
-  state.raf = requestAnimationFrame(tick);
-  playSound();
+  ui.last = performance.now();
+  ui.raf = requestAnimationFrame(tick);
+  emit('sound');
 }
 
 function restoreRecon() {
@@ -1286,20 +1373,20 @@ function restoreRecon() {
   const exit = document.querySelector('#exit-battle');
   exit.textContent = 'EXIT RECON';
   exit.classList.remove('aborting');
-  if (state.deployBtn) state.deployBtn.hidden = false;
-  if (state.hud) { state.hud.remove(); state.hud = null; }
-  if (state.speedBtn) { state.speedBtn.remove(); state.speedBtn = null; }
+  if (ui.deployBtn) ui.deployBtn.hidden = false;
+  if (ui.hud) { ui.hud.remove(); ui.hud = null; }
+  if (ui.speedBtn) { ui.speedBtn.remove(); ui.speedBtn = null; }
   state.speed2x = false;
-  if (state.nukeBtn) { state.nukeBtn.remove(); state.nukeBtn = null; }
-  state.nukeAim = false;
-  if (state.crosshair) { state.crosshair.remove(); state.crosshair = null; }
+  if (ui.nukeBtn) { ui.nukeBtn.remove(); ui.nukeBtn = null; }
+  ui.nukeAim = false;
+  if (ui.crosshair) { ui.crosshair.remove(); ui.crosshair = null; }
   state.wasteZones = [];
-  if (state.bossBar) state.bossBar.hidden = true;
-  if (state.endPanel) { state.endPanel.remove(); state.endPanel = null; }
+  if (ui.bossBar) ui.bossBar.hidden = true;
+  if (ui.endPanel) { ui.endPanel.remove(); ui.endPanel = null; }
   setBuilding(null);
   closeTowerPanel();
-  if (state.bar) { state.bar.remove(); state.bar = null; }
-  if (state.layers) { state.layers.enemies.remove(); state.layers.fx.remove(); if (state.layers.towers) state.layers.towers.remove(); state.layers = null; }
+  if (ui.bar) { ui.bar.remove(); ui.bar = null; }
+  if (ui.layers) { ui.layers.enemies.remove(); ui.layers.fx.remove(); if (ui.layers.towers) ui.layers.towers.remove(); ui.layers = null; }
   state.enemies = [];
   state.towers = [];
   state.projectiles = [];
@@ -1333,7 +1420,7 @@ function paintPayout(panel, data) {
 
 function endMission(win, fromSync = false) {
   state.mode = 'over';
-  cancelAnimationFrame(state.raf);
+  cancelAnimationFrame(ui.raf);
   if (coopHost()) { const bridge = window.CBZCoopBridge; if (bridge && bridge.send) bridge.send({ k: 'over', win }); }
   closeVote();
   hideTip();
@@ -1361,7 +1448,7 @@ function endMission(win, fromSync = false) {
       </div>
     </div>`;
   battlefield.appendChild(panel);
-  state.endPanel = panel;
+  ui.endPanel = panel;
   if (window.CBZShop) {
     CBZShop.submitMission({
       result: win ? 'win' : 'loss',
@@ -1373,15 +1460,15 @@ function endMission(win, fromSync = false) {
       map: state.map ? state.map.id : '',
     }).then((data) => paintPayout(panel, data));
   }
-  if (!eventMode) panel.querySelector('#end-redeploy').addEventListener('click', () => { panel.remove(); state.endPanel = null; resetBoard(); startMission(state.map); });
+  if (!eventMode) panel.querySelector('#end-redeploy').addEventListener('click', () => { panel.remove(); ui.endPanel = null; resetBoard(); startMission(state.map); });
   panel.querySelector('#end-bay').addEventListener('click', () => { resetBoard(); restoreRecon(); openMenu('play'); });
   notifyRoomEnded();
-  banner(win ? 'SECTOR CLEARED' : 'CORE BREACHED', win ? '// VICTORY TOKEN EARNED' : '// EVACUATE', win ? 'banner-green' : 'banner-red');
-  playSound();
+  emit('banner', win ? 'SECTOR CLEARED' : 'CORE BREACHED', win ? '// VICTORY TOKEN EARNED' : '// EVACUATE', win ? 'banner-green' : 'banner-red');
+  emit('sound');
 }
 
 function resetBoard() {
-  if (state.layers) { state.layers.enemies.remove(); state.layers.fx.remove(); }
+  if (ui.layers) { ui.layers.enemies.remove(); ui.layers.fx.remove(); }
   state.enemies = [];
   ensureLayers();
 }
@@ -1394,22 +1481,22 @@ function ensureLayers() {
   board.appendChild(towers);
   board.appendChild(enemies);
   board.appendChild(fx);
-  state.layers = { towers, enemies, fx, ghost: null };
-  state.ghost = null;
+  ui.layers = { towers, enemies, fx, ghost: null };
+  ui.ghost = null;
 }
 
 function abort() {
   if (state.mode === 'idle') return;
-  cancelAnimationFrame(state.raf);
+  cancelAnimationFrame(ui.raf);
   closeVote();
-  if (state.endPanel) { state.endPanel.remove(); state.endPanel = null; }
-  if (state.tip) state.tip.hidden = true;
+  if (ui.endPanel) { ui.endPanel.remove(); ui.endPanel = null; }
+  if (ui.tip) ui.tip.hidden = true;
   restoreRecon();
 }
 
 // --- Deployment loadout bar (the 5 bays you brought) -----------------------------------
 function ensureLoadoutBar() {
-  if (state.bar) state.bar.remove();
+  if (ui.bar) ui.bar.remove();
   const shop = window.CBZShop;
   const loadout = shop && shop.loadout ? shop.loadout() : [];
   const bar = document.createElement('div');
@@ -1425,7 +1512,7 @@ function ensureLoadoutBar() {
     <div class="lo-slots">${slots}</div>
     <div class="lo-hint">PICK A BAY (1-5) → CLICK THE GRID TO DEPLOY · HEX PADS = ANTI-AIR · CLICK A DEPLOYED UNIT → UPGRADE LADDER · RIGHT-CLICK / ESC TO STOP</div>`;
   battlefield.appendChild(bar);
-  state.bar = bar;
+  ui.bar = bar;
   bar.addEventListener('click', (event) => {
     const slot = event.target.closest('.lo-slot[data-tower]');
     if (!slot) return;
@@ -1434,22 +1521,22 @@ function ensureLoadoutBar() {
 }
 
 function refreshBarAfford() {
-  if (!state.bar) return;
-  state.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
+  if (!ui.bar) return;
+  ui.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
     const entry = window.CBZShop && CBZShop.TOWERS.find((item) => item.id === slot.dataset.tower);
     slot.classList.toggle('poor', Boolean(entry && state.cash < entry.cost));
   });
-  const head = state.bar.querySelector('.lo-head b');
+  const head = ui.bar.querySelector('.lo-head b');
   if (head) head.textContent = `${state.towers.length}/${towerLimit()} DEPLOYED`;
 }
 
 function refreshPanelAfford() {
-  if (!state.towerPanel || !state.panelTower) return;
-  const tower = state.panelTower;
+  if (!ui.towerPanel || !ui.panelTower) return;
+  const tower = ui.panelTower;
   const tiers = towerTrack(tower);
   const lvl = trackLevel(tower);
   const next = tiers[lvl];
-  state.towerPanel.querySelectorAll('.tp-buy').forEach((button) => {
+  ui.towerPanel.querySelectorAll('.tp-buy').forEach((button) => {
     const index = Number(button.dataset.tier);
     if (Number.isNaN(index) || index !== lvl) { button.disabled = true; return; }
     button.disabled = Boolean(next) && state.cash < next.cost;
@@ -1462,37 +1549,37 @@ function buildingAllowed() {
 
 function toggleBuild(id) {
   if (!buildingAllowed()) return;
-  if (state.building && state.building.id === id) { setBuilding(null); return; }
+  if (ui.building && ui.building.id === id) { setBuilding(null); return; }
   const entry = window.CBZShop && CBZShop.TOWERS.find((item) => item.id === id);
   if (!entry) return;
   const limit = towerLimit();
-  if (state.towers.length >= limit) { playSound('alarm'); showToast(`Command grid saturated — ${limit} units max at ${window.CBZ_ROOM_PLAYERS || 1} commander(s).`); return; }
+  if (state.towers.length >= limit) { emit('sound', 'alarm'); showToast(`Command grid saturated — ${limit} units max at ${window.CBZ_ROOM_PLAYERS || 1} commander(s).`); return; }
   if (limitReached(entry)) {
-    playSound('alarm');
+    emit('sound', 'alarm');
     showToast(limitToast(entry));
     return;
   }
-  if (state.cash < entry.cost) { playSound('alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return; }
+  if (state.cash < entry.cost) { emit('sound', 'alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return; }
   setBuilding(entry);
 }
 
 function setBuilding(entry) {
-  state.building = entry || null;
-  board.classList.toggle('placing', Boolean(state.building));
+  ui.building = entry || null;
+  board.classList.toggle('placing', Boolean(ui.building));
   closeTowerPanel();
-  if (state.bar) {
-    state.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
-      slot.classList.toggle('on', Boolean(state.building) && slot.dataset.tower === state.building.id);
+  if (ui.bar) {
+    ui.bar.querySelectorAll('.lo-slot[data-tower]').forEach((slot) => {
+      slot.classList.toggle('on', Boolean(ui.building) && slot.dataset.tower === ui.building.id);
     });
   }
-  if (state.building) {
+  if (ui.building) {
     ensureGhost();
-    paintGhost(state.mouseX, state.mouseY);
-  } else if (state.ghost) {
-    state.ghost.remove();
-    state.ghost = null;
+    paintGhost(ui.mouseX, ui.mouseY);
+  } else if (ui.ghost) {
+    ui.ghost.remove();
+    ui.ghost = null;
   }
-  playSound('hover');
+  emit('sound', 'hover');
 }
 
 // --- Placement engine: anywhere on the grid, clearance boxes enforce spacing -----------
@@ -1536,15 +1623,15 @@ function toScreen(x, y) {
 }
 
 function ensureGhost() {
-  if (!state.layers || !state.building) return;
-  if (state.ghost && state.ghostEntry === state.building) return;
-  if (state.ghost) { state.ghost.remove(); state.ghost = null; }
-  if (!state.layers.ghost) {
+  if (!ui.layers || !ui.building) return;
+  if (ui.ghost && ui.ghostEntry === ui.building) return;
+  if (ui.ghost) { ui.ghost.remove(); ui.ghost = null; }
+  if (!ui.layers.ghost) {
     const ghost = svgNode('g', { class: 'layer-ghost' });
     board.appendChild(ghost);
-    state.layers.ghost = ghost;
+    ui.layers.ghost = ghost;
   }
-  const entry = state.building;
+  const entry = ui.building;
   const rng = entry.stats.rng >= 999 ? 300 : entry.stats.rng;
   const g = svgNode('g', { class: 'tw-ghost' });
   g.appendChild(svgNode('circle', { class: 'tw-range', r: rng }));
@@ -1558,44 +1645,43 @@ function ensureGhost() {
   const note = svgNode('text', { class: 'tw-ghost-note', y: -34, 'text-anchor': 'middle' }, entry.name);
   g.appendChild(note);
   g.appendChild(svgNode('text', { class: 'tw-ghost-reason', y: 44, 'text-anchor': 'middle' }, ''));
-  state.layers.ghost.appendChild(g);
-  state.ghost = g;
-  state.ghostEntry = entry;
+  ui.layers.ghost.appendChild(g);
+  ui.ghost = g;
+  ui.ghostEntry = entry;
 }
 
 function paintGhost(x, y) {
-  if (!state.ghost || !state.building) return;
+  if (!ui.ghost || !ui.building) return;
   const verdict = canPlace(x, y);
-  const broke = state.cash < state.building.cost;
+  const broke = state.cash < ui.building.cost;
   const ok = verdict.ok && !broke;
-  state.ghost.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-  state.ghost.classList.toggle('bad', !ok);
-  state.ghost.classList.toggle('off', !state.mouseOn);
-  const reason = state.ghost.querySelector('.tw-ghost-reason');
+  ui.ghost.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+  ui.ghost.classList.toggle('bad', !ok);
+  ui.ghost.classList.toggle('off', !ui.mouseOn);
+  const reason = ui.ghost.querySelector('.tw-ghost-reason');
   if (reason) {
-    if (broke) reason.textContent = `NEED $${state.building.cost} SALVAGE`;
+    if (broke) reason.textContent = `NEED $${ui.building.cost} SALVAGE`;
     else if (verdict.ok && padAt(x, y)) reason.textContent = 'AA PAD — THIS UNIT CAN HIT FLYERS';
     else reason.textContent = verdict.reason;
   }
 }
 
 function rejectPlace(x, y, reason) {
-  floatText(x, y - 20, `✕ ${reason}`, 'block-float');
-  playSound('alarm');
+  emit('float', x, y - 20, `✕ ${reason}`, 'block-float');
+  emit('sound', 'alarm');
 }
 
 function placeTower(entry, x, y) {
-  if (state.towers.length >= towerLimit()) { playSound('alarm'); showToast(`Command grid saturated — ${towerLimit()} units max.`); return false; }
+  if (state.towers.length >= towerLimit()) { emit('sound', 'alarm'); showToast(`Command grid saturated — ${towerLimit()} units max.`); return false; }
   if (limitReached(entry)) {
-    playSound('alarm');
+    emit('sound', 'alarm');
     showToast(limitToast(entry));
     return false;
   }
-  if (state.cash < entry.cost) { playSound('alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return false; }
+  if (state.cash < entry.cost) { emit('sound', 'alarm'); showToast(`Need $${entry.cost} salvage to deploy ${entry.name}.`); return false; }
   state.cash -= entry.cost;
-  const node = towerNode(entry, x, y);
-  state.layers.towers.appendChild(node);
-  const tower = { id: entry.id, entry, x, y, node, head: node.querySelector('.tw-head'), cd: 0.35, boost: 1, lvl: 0 };
+  const tower = { uid: ++state.tidSeq, id: entry.id, entry, x, y, cd: 0.35, boost: 1, lvl: 0 };
+  const node = makeTowerView(tower).node;
   if (entry.id === 'corpseblossom') { tower.veinCd = 0.6; tower.lust = 0; tower.screamCd = 0; }
   if (entry.id === 'gravewarden') { tower.bellCd = 2.5; tower.tollCharges = 0; tower.soulCd = 0; }
   if (entry.id === 'zeroday') tower.nukeCd = 0;
@@ -1611,13 +1697,13 @@ function placeTower(entry, x, y) {
     node.classList.add('tw-on-pad');
     const padNode = document.querySelector(`[data-pad="${pad[0]},${pad[1]}"]`);
     if (padNode) padNode.classList.add('occupied');
-    floatText(x, y - 46, 'AA PAD LINKED', 'aa-float');
+    emit('float', x, y - 46, 'AA PAD LINKED', 'aa-float');
   }
   state.towers.push(tower);
   node.classList.add('placed');
   setTimeout(() => node.classList.remove('placed'), 620);
-  floatText(x, y - 34, `-$${entry.cost}`, 'cash-float');
-  playSound();
+  emit('float', x, y - 34, `-$${entry.cost}`, 'cash-float');
+  emit('sound');
   updateHud();
   return true;
 }
@@ -1834,9 +1920,11 @@ function trackInvested(tower) {
 function paintTowerRange(tower) {
   const es = effStats(tower);
   const r = es.infinite ? 300 : Math.round(es.rng * relayMult(tower, 'range'));
-  const range = tower.node.querySelector('.tw-range');
+  const node = towerNodeOf(tower);
+  if (!node) return;
+  const range = node.querySelector('.tw-range');
   if (range) range.setAttribute('r', r);
-  const aura = tower.node.querySelector('.tw-aura');
+  const aura = node.querySelector('.tw-aura');
   if (aura) aura.setAttribute('r', r);
 }
 
@@ -1859,19 +1947,19 @@ function relayMult(tower, kind) {
 function castRally(tower) {
   if (trackLevel(tower) < 5) return;
   const es = effStats(tower);
-  if ((tower.rallyCd || 0) > 0) { playSound('alarm'); showToast(`Rally recharging — ${Math.ceil(tower.rallyCd)}s left.`); return; }
+  if ((tower.rallyCd || 0) > 0) { emit('sound', 'alarm'); showToast(`Rally recharging — ${Math.ceil(tower.rallyCd)}s left.`); return; }
   const cost = es.rallyCost || 600;
-  if (state.cash < cost) { playSound('alarm'); showToast(`Need $${cost} salvage for RALLY CRY.`); return; }
+  if (state.cash < cost) { emit('sound', 'alarm'); showToast(`Need $${cost} salvage for RALLY CRY.`); return; }
   state.cash -= cost;
   tower.rallyCd = es.rallyCd || 45;
   let boosted = 0;
   for (const other of state.towers) {
     if (other === tower) continue;
-    if (Math.hypot(other.x - tower.x, other.y - tower.y) <= es.rng) { other.rallyT = 6; boosted += 1; fxRing(other.x, other.y, 'fx-ring-amber'); }
+    if (Math.hypot(other.x - tower.x, other.y - tower.y) <= es.rng) { other.rallyT = 6; boosted += 1; emit('ring', other.x, other.y, 'fx-ring-amber'); }
   }
-  floatText(tower.x, tower.y - 46, `RALLY CRY — ${boosted} BOOSTED`, 'lust-float');
-  fxRing(tower.x, tower.y, 'fx-ring-amber');
-  playSound();
+  emit('float', tower.x, tower.y - 46, `RALLY CRY — ${boosted} BOOSTED`, 'lust-float');
+  emit('ring', tower.x, tower.y, 'fx-ring-amber');
+  emit('sound');
   openTowerPanel(tower);
   updateHud();
 }
@@ -1888,20 +1976,9 @@ function launchWardenSoul(tower) {
   const prey = pool.reduce((best, enemy) => (enemy.dist > best.dist ? enemy : best));
   const hull = Math.max(60, 10 * (tower.tollCharges || 0));
   const t = { name: 'VENGEFUL SOUL', tag: 'SUMMON', hp: hull, speed: 55, size: 12, bounty: 0, dmg: 0, color: '#bff1e2', ability: 'The Warden\u2019s choir — detonates on the first hostile it touches for damage equal to its hull. Hull = 10 x TOLL CHARGES.' };
-  const g = svgNode('g', { class: 'enemy e-summon e-soul' });
-  const chassis = svgNode('g', { class: 'e-chassis' });
-  chassis.appendChild(svgNode('circle', { class: 'soul-halo', r: 11 }));
-  chassis.appendChild(svgNode('circle', { class: 'soul-core', r: 5 }));
-  chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: -2, cy: -1.4, r: 1.2 }));
-  chassis.appendChild(svgNode('circle', { class: 'soul-eye', cx: 2.4, cy: -1.4, r: 1.2 }));
-  g.appendChild(chassis);
-  const barY = -(t.size + 13);
-  g.appendChild(svgNode('rect', { class: 'hp-bg', x: -11, y: barY, width: 22, height: 3.4 }));
-  const fill = svgNode('rect', { class: 'hp-fill', x: -11, y: barY, width: 22, height: 3.4 });
-  g.appendChild(fill);
   const lane = state.samplers[prey.pathIdx];
   const soul = {
-    key: 'soul', t, node: g, fill, shieldFill: fill, nid: ++state.nidSeq,
+    key: 'soul', t, nid: ++state.nidSeq,
     hp: hull, maxHp: hull, shield: 0, maxShield: 0,
     pathIdx: prey.pathIdx, dist: Math.max(0, lane.len - 4),
     speed: t.speed, alive: true, friendly: true, reverse: true,
@@ -1910,34 +1987,24 @@ function launchWardenSoul(tower) {
   const [sx, sy] = lane.at(soul.dist);
   soul.fx = sx;
   soul.fy = sy;
-  g.setAttribute('transform', `translate(${sx.toFixed(1)} ${sy.toFixed(1)})`);
-  const bloom = svgNode('circle', { class: 'fx-ring fx-bloom', cx: sx, cy: sy, r: 8 });
-  state.layers.fx.appendChild(bloom);
-  setTimeout(() => bloom.remove(), 720);
-  g.classList.add('spawn-in');
-  setTimeout(() => g.classList.remove('spawn-in'), 420);
-  state.layers.enemies.appendChild(g);
   state.enemies.push(soul);
-  g.addEventListener('pointerenter', (event) => showSummonTip(soul, event));
-  g.addEventListener('pointermove', moveTip);
-  g.addEventListener('pointerleave', () => hideTip(soul));
-  fxRing(sx, sy, 'fx-ring-crimson');
-  floatText(sx, sy - 24, 'A SOUL RISES FROM THE CORE', 'summon-float');
-  paintBars(soul);
+  emit('bloom', sx, sy, 8);
+  emit('ring', sx, sy, 'fx-ring-crimson');
+  emit('float', sx, sy - 24, 'A SOUL RISES FROM THE CORE', 'summon-float');
   return true;
 }
 
 function castSoul(tower) {
   if (trackLevel(tower) < 6) return;
   const es = effStats(tower);
-  if ((tower.soulCd || 0) > 0) { playSound('alarm'); showToast(`The choir rests — ${Math.ceil(tower.soulCd)}s until the next hymn.`); return; }
+  if ((tower.soulCd || 0) > 0) { emit('sound', 'alarm'); showToast(`The choir rests — ${Math.ceil(tower.soulCd)}s until the next hymn.`); return; }
   const cost = es.soulCost || 900;
-  if (state.cash < cost) { playSound('alarm'); showToast(`Need $${cost} salvage to raise a soul from the core.`); return; }
-  if (!state.enemies.some((enemy) => enemy.alive && !enemy.friendly)) { playSound('alarm'); showToast('The choir needs an audience — no hostiles on the grid.'); return; }
+  if (state.cash < cost) { emit('sound', 'alarm'); showToast(`Need $${cost} salvage to raise a soul from the core.`); return; }
+  if (!state.enemies.some((enemy) => enemy.alive && !enemy.friendly)) { emit('sound', 'alarm'); showToast('The choir needs an audience — no hostiles on the grid.'); return; }
   state.cash -= cost;
   tower.soulCd = es.soulCd || 45;
   launchWardenSoul(tower);
-  playSound();
+  emit('sound');
   openTowerPanel(tower);
   updateHud();
 }
@@ -1968,14 +2035,14 @@ function buyTrack(tower) {
   const lvl = trackLevel(tower);
   if (lvl >= tiers.length) return;
   const tier = tiers[lvl];
-  if (state.cash < tier.cost) { playSound('alarm'); showToast(`Need $${tier.cost} salvage for ${tier.label}.`); return; }
+  if (state.cash < tier.cost) { emit('sound', 'alarm'); showToast(`Need $${tier.cost} salvage for ${tier.label}.`); return; }
   state.cash -= tier.cost;
   tower.lvl = lvl + 1;
-  if (tower.id === 'zeroday' && tower.lvl >= 6) { showToast('NUCLEAR FALL OUT ARMED — the rig can call the strike.'); playSound('alarm'); }
+  if (tower.id === 'zeroday' && tower.lvl >= 6) { showToast('NUCLEAR FALL OUT ARMED — the rig can call the strike.'); emit('sound', 'alarm'); }
   paintTowerRange(tower);
-  floatText(tower.x, tower.y - 42, `${tier.label} ONLINE`, 'up-float');
-  fxRing(tower.x, tower.y, 'fx-ring-white');
-  playSound();
+  emit('float', tower.x, tower.y - 42, `${tier.label} ONLINE`, 'up-float');
+  emit('ring', tower.x, tower.y, 'fx-ring-white');
+  emit('sound');
   updateHud();
   openTowerPanel(tower); // re-render the panel with the new tier installed
 }
@@ -2109,9 +2176,9 @@ function openTowerPanel(tower) {
   if (left + pw > window.innerWidth - margin) left = sx - pw - 26; // flip left near the right edge
   panel.style.left = `${Math.max(margin, Math.min(window.innerWidth - pw - margin, left))}px`;
   panel.style.top = `${Math.max(margin, Math.min(window.innerHeight - ph - margin, sy - 120))}px`;
-  state.towerPanel = panel;
-  state.panelTower = tower;
-  tower.node.classList.add('selected');
+  ui.towerPanel = panel;
+  ui.panelTower = tower;
+  towerNodeOf(tower).classList.add('selected');
   panel.querySelectorAll('.tp-buy').forEach((button) => button.addEventListener('click', () => buyTrack(tower)));
   panel.querySelector('.tp-sell').addEventListener('click', () => sellTower(tower));
   const purge = panel.querySelector('#tp-purge');
@@ -2132,16 +2199,16 @@ function openTowerPanel(tower) {
 }
 
 function closeTowerPanel() {
-  if (state.panelTower && state.panelTower.node) state.panelTower.node.classList.remove('selected');
-  if (state.towerPanel) { state.towerPanel.remove(); state.towerPanel = null; }
-  state.panelTower = null;
+  if (ui.panelTower) { const node = towerNodeOf(ui.panelTower); if (node) node.classList.remove('selected'); }
+  if (ui.towerPanel) { ui.towerPanel.remove(); ui.towerPanel = null; }
+  ui.panelTower = null;
 }
 
 function sellTower(tower) {
   if (coopGuest()) { coopIntent({ a: 'sell', t: state.towers.indexOf(tower) }); closeTowerPanel(); return; }
   const refund = Math.floor(trackInvested(tower) * 0.7);
   state.cash += refund;
-  tower.node.remove();
+  dropTowerView(tower);
   if (tower.pad) {
     const padNode = document.querySelector(`[data-pad="${tower.pad[0]},${tower.pad[1]}"]`);
     if (padNode) padNode.classList.remove('occupied');
@@ -2149,15 +2216,15 @@ function sellTower(tower) {
   state.towers = state.towers.filter((item) => item !== tower);
   const [x, y] = [tower.x, tower.y];
   closeTowerPanel();
-  floatText(x, y - 20, `+$${refund} SALVAGED`, 'cash-float');
-  fxRing(x, y, 'fx-ring-amber');
-  playSound();
+  emit('float', x, y - 20, `+$${refund} SALVAGED`, 'cash-float');
+  emit('ring', x, y, 'fx-ring-amber');
+  emit('sound');
   updateHud();
 }
 
 // --- Tower combat brain ------------------------------------------------------------------
 function updateTowers(dt) {
-  if (!state.layers || !state.towers.length) { paintNukeButton(); return; }
+  if (!state.towers.length) { paintNukeButton(); return; }
   // Rally clock: RALLY CRY keeps the ring's fire rate flooded for its duration.
   for (const tower of state.towers) {
     tower.rallyT = Math.max(0, (tower.rallyT || 0) - dt);
@@ -2167,7 +2234,6 @@ function updateTowers(dt) {
   // Bloat EMP clock: offline towers drag back online as the timer drains.
   for (const tower of state.towers) {
     tower.offlineT = Math.max(0, (tower.offlineT || 0) - dt);
-    tower.node.classList.toggle('tw-offline', tower.offlineT > 0);
   }
   for (const tower of state.towers) {
     if (tower.id === 'corpseblossom') {
@@ -2177,19 +2243,19 @@ function updateTowers(dt) {
         tower.veinCd -= dt;
         if (tower.veinCd <= 0) {
           const [lo, hi] = es.veinRate || [0.1, 1];
-          tower.veinCd = lo + Math.random() * (hi - lo);
+          tower.veinCd = lo + rand() * (hi - lo);
           const pool = state.enemies.filter((enemy) => {
             if (!enemy.alive || enemy.friendly) return false;
             const [px, py] = posOf(enemy);
             return Math.hypot(px - tower.x, py - tower.y) <= es.rng;
           });
           if (pool.length) {
-            const target = pool[Math.floor(Math.random() * pool.length)];
+            const target = pool[Math.floor(rand() * pool.length)];
             const [tx, ty] = posOf(target);
             const burst = svgNode('circle', { class: 'fx-ring fx-veins-burst', cx: tx, cy: ty, r: 6 });
-            state.layers.fx.appendChild(burst);
+            ui.layers.fx.appendChild(burst);
             setTimeout(() => burst.remove(), 620);
-            fxRing(tx, ty, 'fx-ring-virus');
+            emit('ring', tx, ty, 'fx-ring-virus');
             for (const enemy of pool) {
               const [px, py] = posOf(enemy);
               if (Math.hypot(px - tx, py - ty) <= 55) damageEnemy(enemy, es.veins, { src: 'veins' });
@@ -2203,7 +2269,7 @@ function updateTowers(dt) {
       tower.droneCd = Math.max(0, (tower.droneCd || 0) - dt);
       if (tower.droneCd <= 0 && launchStrikeDrone(tower)) {
         tower.droneCd = effStats(tower).launchEvery || 6;
-        if (state.panelTower === tower) openTowerPanel(tower); // live launch countdown
+        if (ui.panelTower === tower) openTowerPanel(tower); // live launch countdown
       }
     }
     if (tower.id === 'gravewarden') {
@@ -2225,9 +2291,9 @@ function updateTowers(dt) {
           }
         }
         if (toll) {
-          fxRing(tower.x, tower.y, 'fx-ring-crimson');
-          floatText(tower.x, tower.y - 46, `DEATH TOLL — ${toll} CAUGHT`, 'lust-float');
-          playSound();
+          emit('ring', tower.x, tower.y, 'fx-ring-crimson');
+          emit('float', tower.x, tower.y - 46, `DEATH TOLL — ${toll} CAUGHT`, 'lust-float');
+          emit('sound');
         }
       }
     }
@@ -2247,10 +2313,8 @@ function updateTowers(dt) {
           tower.lobCd = 4;
           const prey = pool.reduce((best, enemy) => (enemy.dist > best.dist ? enemy : best));
           const [lx, ly] = posOf(prey);
-          const shell = svgNode('circle', { class: 'fx-shell', r: 4, cx: tower.x, cy: tower.y });
-          state.layers.fx.appendChild(shell);
-          state.projectiles.push({ kind: 'shell', x: tower.x, y: tower.y, tx: lx, ty: ly, speed: 240, dmg: es.lobDmg || 140, splash: es.lobSplash || 50, node: shell });
-          fxRing(tower.x, tower.y, 'fx-ring-amber');
+          addProjectile({ kind: 'shell', x: tower.x, y: tower.y, tx: lx, ty: ly, speed: 240, dmg: es.lobDmg || 140, splash: es.lobSplash || 50 });
+          emit('ring', tower.x, tower.y, 'fx-ring-amber');
         }
       }
     }
@@ -2262,23 +2326,12 @@ function updateTowers(dt) {
       const es = effStats(tower);
       if (tower.charge) {
         const target = state.enemies.find((enemy) => enemy.alive && !enemy.friendly && enemy.nid === tower.charge.nid);
-        const ring = tower.charge.fx.ring;
-        const lock = tower.charge.fx.lock;
-        const line = tower.charge.fx.line;
         if (target) {
           const [px, py] = posOf(target);
           tower.charge.x = px;
           tower.charge.y = py;
-          if (lock) lock.setAttribute('transform', `translate(${px.toFixed(1)} ${py.toFixed(1)})`);
-          if (line) { line.setAttribute('x2', px.toFixed(1)); line.setAttribute('y2', py.toFixed(1)); }
         }
         tower.charge.t -= dt;
-        if (ring) {
-          ring.setAttribute('cx', tower.x);
-          ring.setAttribute('cy', tower.y);
-          ring.setAttribute('r', (6 + 30 * (1 - Math.max(0, tower.charge.t) / (es.warrantCd || 12))).toFixed(1));
-        }
-        if (line) { line.setAttribute('x1', tower.x); line.setAttribute('y1', tower.y); }
         if (!target) {
           // The sentenced hull died mid-charge — the verdict transfers to the
           // next beefiest hull in reach, or holds fully wound until one shows.
@@ -2377,7 +2430,7 @@ function acquireTarget(tower) {
 function aimHead(tower, target) {
   const [ex, ey] = posOf(target);
   const angle = (Math.atan2(ey - tower.y, ex - tower.x) * 180) / Math.PI;
-  if (tower.head) tower.head.setAttribute('transform', `rotate(${angle.toFixed(1)})`);
+  tower.aim = angle;
 }
 
 // --- WAR DRUMS aura: FRAG ROUNDS ----------------------------------------------------
@@ -2405,7 +2458,7 @@ function fragBurst(tower, target, dealt) {
     const [px, py] = posOf(enemy);
     if (Math.hypot(px - tx, py - ty) <= radius) { damageEnemy(enemy, Math.max(1, Math.round(dealt * frag)), { src: 'frag' }); hit += 1; }
   }
-  if (hit) fxRing(tx, ty, 'fx-ring-amber');
+  if (hit) emit('ring', tx, ty, 'fx-ring-amber');
 }
 
 // --- DEATHWARRANT: the apex verdict --------------------------------------------------
@@ -2421,27 +2474,14 @@ function acquireWarrantTarget(tower, es) {
 }
 
 function beginWarrantCharge(tower, target, es) {
-  const ring = svgNode('circle', { class: 'fx-warrant-ring', cx: tower.x, cy: tower.y, r: 6 });
-  const lock = svgNode('g', { class: 'fx-warrant-lock' });
-  lock.appendChild(svgNode('path', { d: 'M0 -14 L14 0 L0 14 L-14 0 Z' }));
   const [px, py] = posOf(target);
-  lock.setAttribute('transform', `translate(${px.toFixed(1)} ${py.toFixed(1)})`);
-  const line = svgNode('line', { class: 'fx-warrant-line', x1: tower.x, y1: tower.y, x2: px.toFixed(1), y2: py.toFixed(1) });
-  state.layers.fx.appendChild(line);
-  state.layers.fx.appendChild(ring);
-  state.layers.fx.appendChild(lock);
-  tower.charge = { nid: target.nid, x: px, y: py, t: es.warrantCd || 12, fx: { ring, lock, line } };
-  tower.node.classList.add('tw-charging');
-  floatText(tower.x, tower.y - 52, 'VERDICT LOCKED', 'core-float');
-  playSound('alarm');
+  tower.charge = { nid: target.nid, x: px, y: py, t: es.warrantCd || 12, total: es.warrantCd || 12 };
+  emit('float', tower.x, tower.y - 52, 'VERDICT LOCKED', 'core-float');
+  emit('sound', 'alarm');
 }
 
 function dropWarrantCharge(tower) {
-  if (tower.charge) {
-    for (const el of Object.values(tower.charge.fx)) el.remove();
-    tower.charge = null;
-  }
-  tower.node.classList.remove('tw-charging');
+  tower.charge = null;
 }
 
 function fireWarrant(tower, target, es) {
@@ -2451,9 +2491,9 @@ function fireWarrant(tower, target, es) {
   damageEnemy(target, payload, { phase: true, src: 'warrant' });
   fireLine(tower, target, 'fx-warrant', 7.5);
   fireLine(tower, target, 'fx-warrant-core', 2.6);
-  fxRing(tx, ty, 'fx-ring-white');
-  fxRing(tx, ty, 'fx-ring-crimson');
-  floatText(tx, ty - target.t.size - 12, `ANNIHILATED −${payload}`, 'core-float');
+  emit('ring', tx, ty, 'fx-ring-white');
+  emit('ring', tx, ty, 'fx-ring-crimson');
+  emit('float', tx, ty - target.t.size - 12, `ANNIHILATED −${payload}`, 'core-float');
   tower.warrantCd = es.warrantCd || 12;
   if (es.echo && !target.alive) {
     // DEATH ECHO — the kill detonates: everything near the corpse eats a
@@ -2463,9 +2503,9 @@ function fireWarrant(tower, target, es) {
       const [px, py] = posOf(enemy);
       if (Math.hypot(px - tx, py - ty) <= 90) damageEnemy(enemy, Math.round(target.maxHp * 0.2), { phase: true, src: 'echo' });
     }
-    fxRing(tx, ty, 'fx-ring-amber');
+    emit('ring', tx, ty, 'fx-ring-amber');
   }
-  playSound();
+  emit('sound');
 }
 
 // --- THE VETERAN: instant free gun switch -------------------------------------------
@@ -2474,9 +2514,9 @@ function switchGun(tower) {
   tower.heat = 0;
   tower.heatNid = null;
   paintTowerRange(tower);
-  fxRing(tower.x, tower.y, 'fx-ring-white');
-  floatText(tower.x, tower.y - 44, `${effStats(tower).gunName || 'BATTLE RIFLE'} UP`, 'up-float');
-  playSound();
+  emit('ring', tower.x, tower.y, 'fx-ring-white');
+  emit('float', tower.x, tower.y - 44, `${effStats(tower).gunName || 'BATTLE RIFLE'} UP`, 'up-float');
+  emit('sound');
   openTowerPanel(tower);
 }
 
@@ -2484,13 +2524,13 @@ function switchGun(tower) {
 function bondDeposit(tower) {
   const es = effStats(tower);
   const cap = es.bondCap || 3000;
-  if ((tower.bank || 0) >= cap) { playSound('alarm'); showToast(`The bond is full — $${formatCash(cap)} cap. Withdraw or upgrade the ledger.`); return; }
-  if (state.cash < 500) { playSound('alarm'); showToast('Need $500 salvage to feed the bond.'); return; }
+  if ((tower.bank || 0) >= cap) { emit('sound', 'alarm'); showToast(`The bond is full — $${formatCash(cap)} cap. Withdraw or upgrade the ledger.`); return; }
+  if (state.cash < 500) { emit('sound', 'alarm'); showToast('Need $500 salvage to feed the bond.'); return; }
   const amount = Math.min(500, cap - (tower.bank || 0));
   state.cash -= amount;
   tower.bank = (tower.bank || 0) + amount;
-  floatText(tower.x, tower.y - 44, `+$${amount} BONDED`, 'cash-float');
-  playSound();
+  emit('float', tower.x, tower.y - 44, `+$${amount} BONDED`, 'cash-float');
+  emit('sound');
   updateHud();
   openTowerPanel(tower);
 }
@@ -2500,9 +2540,9 @@ function bondWithdraw(tower) {
   if (amount <= 0) return;
   tower.bank = 0;
   state.cash += amount;
-  floatText(tower.x, tower.y - 44, `+$${amount} WITHDRAWN`, 'cash-float');
-  fxRing(tower.x, tower.y, 'fx-ring-amber');
-  playSound();
+  emit('float', tower.x, tower.y - 44, `+$${amount} WITHDRAWN`, 'cash-float');
+  emit('ring', tower.x, tower.y, 'fx-ring-amber');
+  emit('sound');
   updateHud();
   openTowerPanel(tower);
 }
@@ -2514,7 +2554,7 @@ function formatCash(value) {
 function fireLine(tower, target, cls, width = 2) {
   const [ex, ey] = posOf(target);
   const line = svgNode('line', { class: `fx-line ${cls}`, x1: tower.x, y1: tower.y, x2: ex, y2: ey, 'stroke-width': width });
-  state.layers.fx.appendChild(line);
+  ui.layers.fx.appendChild(line);
   setTimeout(() => line.remove(), 300);
   return [ex, ey];
 }
@@ -2534,9 +2574,7 @@ function fireTower(tower, target) {
       break;
     }
     case 'lazermortar': {
-      const shell = svgNode('circle', { class: 'fx-shell', r: 4, cx: tower.x, cy: tower.y });
-      state.layers.fx.appendChild(shell);
-      state.projectiles.push({ kind: 'shell', x: tower.x, y: tower.y, tx, ty, speed: 260, dmg, splash: effStats(tower).splash || 30, node: shell });
+      addProjectile({ kind: 'shell', x: tower.x, y: tower.y, tx, ty, speed: 260, dmg, splash: effStats(tower).splash || 30 });
       break;
     }
     case 'shotgunner': {
@@ -2554,10 +2592,10 @@ function fireTower(tower, target) {
         const px = tower.x + Math.cos(aim + off) * span;
         const py = tower.y + Math.sin(aim + off) * span;
         const pellet = svgNode('line', { class: 'fx-line fx-pellet', x1: tower.x, y1: tower.y, x2: px, y2: py, 'stroke-width': 2.5 });
-        state.layers.fx.appendChild(pellet);
+        ui.layers.fx.appendChild(pellet);
         setTimeout(() => pellet.remove(), 300);
       }
-      fxRing(tx, ty, 'fx-ring-amber');
+      emit('ring', tx, ty, 'fx-ring-amber');
       break;
     }
     case 'sniper': {
@@ -2565,7 +2603,7 @@ function fireTower(tower, target) {
       // no projectile phase, just a bright rail line and a red impact ring.
       damageEnemy(target, dmg);
       fireLine(tower, target, 'fx-sniper', 1.6);
-      fxRing(tx, ty, 'fx-ring-red');
+      emit('ring', tx, ty, 'fx-ring-red');
       fragBurst(tower, target, dmg);
       break;
     }
@@ -2597,7 +2635,7 @@ function fireTower(tower, target) {
           if (Math.hypot(px - tx, py - ty) <= flak) damageEnemy(enemy, Math.round(dmg * 0.5));
         }
       }
-      fxRing(tx, ty, 'fx-ring-amber');
+      emit('ring', tx, ty, 'fx-ring-amber');
       fragBurst(tower, target, dmg);
       break;
     }
@@ -2606,10 +2644,8 @@ function fireTower(tower, target) {
       // nothing — it always lands) and detonates for full damage in the blast.
       // MIRV tiers crack the shell into cluster bomblets on impact.
       const es = effStats(tower);
-      const missile = svgNode('circle', { class: 'fx-shell fx-missile', r: 5, cx: tower.x, cy: tower.y });
-      state.layers.fx.appendChild(missile);
-      state.projectiles.push({ kind: 'missile', x: tower.x, y: tower.y, tx, ty, speed: 210, dmg, splash: es.splash || 55, cluster: es.cluster || 0, node: missile });
-      fxRing(tower.x, tower.y, 'fx-ring-amber');
+      addProjectile({ kind: 'missile', x: tower.x, y: tower.y, tx, ty, speed: 210, dmg, splash: es.splash || 55, cluster: es.cluster || 0 });
+      emit('ring', tower.x, tower.y, 'fx-ring-amber');
       break;
     }
     case 'virus': {
@@ -2621,12 +2657,12 @@ function fireTower(tower, target) {
       const es = effStats(tower);
       if (es.corrupt && !target.friendly) {
         target.corrupt = { dps: es.corrupt, t: 5 };
-        fxRing(tx, ty, 'fx-ring-virus');
+        emit('ring', tx, ty, 'fx-ring-virus');
       }
       const slash = svgNode('line', { class: 'fx-line fx-tracer fx-slash', x1: tower.x, y1: tower.y, x2: tx, y2: ty, 'stroke-width': 3 });
-      state.layers.fx.appendChild(slash);
+      ui.layers.fx.appendChild(slash);
       setTimeout(() => slash.remove(), 160);
-      fxRing(tx, ty, 'fx-ring-virus');
+      emit('ring', tx, ty, 'fx-ring-virus');
       fragBurst(tower, target, dmg);
       break;
     }
@@ -2638,12 +2674,12 @@ function fireTower(tower, target) {
       const headsmanShot = target.t.boss ? dmg : Math.max(1, Math.round(dmg * (es.chaffPct || 0.15)));
       damageEnemy(target, headsmanShot);
       fireLine(tower, target, 'fx-sniper', 2.6);
-      fxRing(tx, ty, 'fx-ring-red');
+      emit('ring', tx, ty, 'fx-ring-red');
       fragBurst(tower, target, headsmanShot);
       if (target.alive && target.t.boss && target.key !== 'overseer' && target.hp <= target.maxHp * (es.execute || 0.15)) {
         damageEnemy(target, 999999999, { phase: true, src: 'execute' });
-        floatText(tx, ty - target.t.size - 12, 'EXECUTED', 'core-float');
-        fxRing(tx, ty, 'fx-ring-crimson');
+        emit('float', tx, ty - target.t.size - 12, 'EXECUTED', 'core-float');
+        emit('ring', tx, ty, 'fx-ring-crimson');
       }
       break;
     }
@@ -2656,7 +2692,7 @@ function fireTower(tower, target) {
       // the relic's shot should read as a piece of the dawn, not a tracer.
       fireLine(tower, target, 'fx-dawn-halo', 6.5);
       fireLine(tower, target, 'fx-dawn', 2.6);
-      fxRing(tx, ty, 'fx-ring-amber');
+      emit('ring', tx, ty, 'fx-ring-amber');
       const burn = effStats(tower).splash || 0;
       if (burn > 0) {
         for (const enemy of state.enemies) {
@@ -2685,17 +2721,17 @@ function fireTower(tower, target) {
           const px = tower.x + Math.cos(aim + off) * span;
           const py = tower.y + Math.sin(aim + off) * span;
           const pellet = svgNode('line', { class: 'fx-line fx-pellet', x1: tower.x, y1: tower.y, x2: px, y2: py, 'stroke-width': 2.5 });
-          state.layers.fx.appendChild(pellet);
+          ui.layers.fx.appendChild(pellet);
           setTimeout(() => pellet.remove(), 300);
         }
-        fxRing(tx, ty, 'fx-ring-amber');
+        emit('ring', tx, ty, 'fx-ring-amber');
         break;
       }
       if (es.gunName === 'LONGRIFLE') {
         const shot = target.t.boss ? Math.round(dmg * (es.bossMult || 1.4)) : dmg;
         damageEnemy(target, shot, { armorPierce: true });
         fireLine(tower, target, 'fx-sniper', 2);
-        fxRing(tx, ty, 'fx-ring-red');
+        emit('ring', tx, ty, 'fx-ring-red');
         fragBurst(tower, target, shot);
         break;
       }
@@ -2717,8 +2753,32 @@ function fireTower(tower, target) {
   }
 }
 
+function addProjectile(p) {
+  p.id = ++state.pidSeq;
+  state.projectiles.push(p);
+}
+
+// View: one SVG node per projectile id, created on first sight, moved every tick, dropped when the sim forgets it.
+const projNodes = new Map();
+function renderProjectiles() {
+  if (!ui.layers) return;
+  const live = new Set();
+  for (const p of state.projectiles) {
+    if (p.dead) continue;
+    live.add(p.id);
+    let node = projNodes.get(p.id);
+    if (!node) {
+      node = svgNode('circle', { class: p.kind === 'missile' ? 'fx-shell fx-missile' : 'fx-shell', r: p.kind === 'missile' ? 5 : 4, cx: p.x, cy: p.y });
+      ui.layers.fx.appendChild(node);
+      projNodes.set(p.id, node);
+    }
+    node.setAttribute('cx', p.x.toFixed(1));
+    node.setAttribute('cy', p.y.toFixed(1));
+  }
+  for (const [id, node] of projNodes) if (!live.has(id)) { node.remove(); projNodes.delete(id); }
+}
+
 function updateProjectiles(dt) {
-  if (!state.layers) return;
   for (const p of state.projectiles) {
     if (p.kind === 'shell' || p.kind === 'missile') {
       const dx = p.tx - p.x;
@@ -2728,7 +2788,7 @@ function updateProjectiles(dt) {
         p.x = p.tx;
         p.y = p.ty;
         p.dead = true;
-        fxRing(p.tx, p.ty, 'fx-ring-red');
+        emit('ring', p.tx, p.ty, 'fx-ring-red');
         for (const enemy of state.enemies) {
           if (!enemy.alive) continue;
           const [px, py] = posOf(enemy);
@@ -2737,7 +2797,7 @@ function updateProjectiles(dt) {
         // MIRV PROTOCOL: the shell cracks open — cluster bomblets pepper a wide
         // secondary ring around the impact crater for partial damage (35% post-nerf).
         if (p.cluster) {
-          fxRing(p.tx, p.ty, 'fx-ring-amber');
+          emit('ring', p.tx, p.ty, 'fx-ring-amber');
           for (const enemy of state.enemies) {
             if (!enemy.alive) continue;
             const [px, py] = posOf(enemy);
@@ -2749,10 +2809,7 @@ function updateProjectiles(dt) {
         p.x += (dx / Math.hypot(dx, dy)) * step;
         p.y += (dy / Math.hypot(dx, dy)) * step;
       }
-      p.node.setAttribute('cx', p.x.toFixed(1));
-      p.node.setAttribute('cy', p.y.toFixed(1));
     }
-    if (p.dead) p.node.remove();
   }
   state.projectiles = state.projectiles.filter((p) => !p.dead);
 }
@@ -2768,54 +2825,54 @@ function distToSegment(px, py, x1, y1, x2, y2) {
 // --- Board plumbing: pointer tracking, deploy clicks, cancel gestures --------------------
 board.addEventListener('pointermove', (event) => {
   const [x, y] = boardPoint(event);
-  state.mouseX = x;
-  state.mouseY = y;
-  state.mouseOn = true;
-  if (state.crosshair) state.crosshair.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-  if (state.building) paintGhost(x, y);
+  ui.mouseX = x;
+  ui.mouseY = y;
+  ui.mouseOn = true;
+  if (ui.crosshair) ui.crosshair.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+  if (ui.building) paintGhost(x, y);
 });
 
 board.addEventListener('pointerleave', () => {
-  state.mouseOn = false;
-  if (state.ghost) state.ghost.classList.add('off');
+  ui.mouseOn = false;
+  if (ui.ghost) ui.ghost.classList.add('off');
 });
 
 board.addEventListener('click', (event) => {
-  if (!state.bar || !buildingAllowed()) return;
+  if (!ui.bar || !buildingAllowed()) return;
   const [x, y] = boardPoint(event);
-  if (state.nukeAim) { fireNuke(x, y); return; }
-  if (state.building) {
+  if (ui.nukeAim) { fireNuke(x, y); return; }
+  if (ui.building) {
     const verdict = canPlace(x, y);
     if (!verdict.ok) { rejectPlace(x, y, verdict.reason); return; }
     if (coopGuest()) {
-      coopIntent({ a: 'place', id: state.building.id, x, y });
-      floatText(x, y - 20, 'SYNC → SQUAD LEAD', 'sync-float');
+      coopIntent({ a: 'place', id: ui.building.id, x, y });
+      emit('float', x, y - 20, 'SYNC → SQUAD LEAD', 'sync-float');
       setBuilding(null);
       return;
     }
-    if (state.cash < state.building.cost) { rejectPlace(x, y, `NEED $${state.building.cost} SALVAGE`); return; }
-    placeTower(state.building, x, y);
+    if (state.cash < ui.building.cost) { rejectPlace(x, y, `NEED $${ui.building.cost} SALVAGE`); return; }
+    placeTower(ui.building, x, y);
     return;
   }
   const node = event.target.closest ? event.target.closest('.tower') : null;
   if (node) {
-    const tower = state.towers.find((item) => item.node === node);
+    const tower = state.towers.find((item) => (item.uid ? String(item.uid) === node.dataset.uid : item.node === node));
     if (tower) openTowerPanel(tower);
   }
 });
 
 board.addEventListener('contextmenu', (event) => {
   event.preventDefault();
-  if (state.building) setBuilding(null);
+  if (ui.building) setBuilding(null);
   else closeTowerPanel();
 });
 
 document.addEventListener('keydown', (event) => {
   if (document.querySelector('#battlefield').hidden) return;
-  if (event.key === 'Escape') { setBuilding(null); closeTowerPanel(); if (state.nukeAim) setNukeAim(false); return; }
+  if (event.key === 'Escape') { setBuilding(null); closeTowerPanel(); if (ui.nukeAim) setNukeAim(false); return; }
   const digit = Number(event.key);
-  if (digit >= 1 && digit <= 5 && state.bar && buildingAllowed()) {
-    const slots = state.bar.querySelectorAll('.lo-slot[data-tower]');
+  if (digit >= 1 && digit <= 5 && ui.bar && buildingAllowed()) {
+    const slots = ui.bar.querySelectorAll('.lo-slot[data-tower]');
     const slot = slots[digit - 1];
     if (slot) toggleBuild(slot.dataset.tower);
   }
@@ -2889,7 +2946,7 @@ function coopApplySync(snap) {
   state.earned = snap.er;
   if (snap.sq && snap.sq !== state.lastSyncSeq) {
     state.lastSyncSeq = snap.sq;
-    if (snap.st) banner(snap.st, '// SQUAD LINK', 'banner-wave');
+    if (snap.st) emit('banner', snap.st, '// SQUAD LINK', 'banner-wave');
   }
   // Towers appear as the host builds them; ladder installs repaint their rings.
   const seenTowers = new Set();
@@ -2900,7 +2957,7 @@ function coopApplySync(snap) {
       const entry = CBZShop.TOWERS.find((item) => item.id === id);
       if (!entry) continue;
       const node = towerNode(entry, x, y);
-      state.layers.towers.appendChild(node);
+      ui.layers.towers.appendChild(node);
       tower = { id, entry, x, y, node, head: node.querySelector('.tw-head'), cd: 0, boost: 1, lvl, gid, onPad: Boolean(pad), guest: true };
       state.towers.push(tower);
       node.classList.add('placed');
@@ -2933,7 +2990,7 @@ function coopApplySync(snap) {
       g.appendChild(fill);
       const shieldFill = svgNode('rect', { class: 'shield-fill', x: -barW / 2, y: barY - 4, width: 0, height: 2.4 });
       g.appendChild(shieldFill);
-      state.layers.enemies.appendChild(g);
+      ui.layers.enemies.appendChild(g);
       enemy = { key, t, node: g, fill, shieldFill, hp, maxHp, shield, maxShield: t.shield || 0, alive: true, gx: x, gy: y, fx: x, fy: y, angle: 0, guest: true, guestNid: nid, friendly: Boolean(friendly) };
       state.guestMap.set(nid, enemy);
       g.classList.add('spawn-in');
@@ -2944,7 +3001,7 @@ function coopApplySync(snap) {
     if (enemy.hp !== hp || enemy.shield !== shield) {
       enemy.hp = hp;
       enemy.shield = shield;
-      paintBars(enemy);
+      paintGuestBars(enemy);
     }
   }
   for (const [nid, enemy] of state.guestMap) {

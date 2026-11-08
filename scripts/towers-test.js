@@ -189,7 +189,7 @@ check('UPDATE LOG leads with ULTIMATUM entry', appjs.indexOf("version: '2026.10.
 check('update log covers cap removal + vault + blossom card + migration', ['clearance cap is GONE', 'ULTIMATUM system goes live', 'first ULTIMATUM card', 'backfilled from their clearance history'].every((s) => appjs.includes(s)));
 check('update log covers sentinel buff + shredder + sniper nerf #3 + virus rework', ['SENTINEL TURRET buffed', 'SHREDDER decrypts at Clearance 20', 'SNIPER tuned down again', 'VIRUS reworked', 'MISSILE SILO'].every((s) => appjs.includes(s)));
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261024n', busts.length === 6 && busts.every((v) => v === '?v=20261024n'), busts.join(' '));
+check('all 6 index.html assets cache-busted to 20261024o', busts.length === 6 && busts.every((v) => v === '?v=20261024o'), busts.join(' '));
 check('shell footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP') && indexhtml.includes('THE CRIMSON WELL IS OPEN') && indexhtml.includes('ULTIMATUM VAULT OPEN'));
 check('play menu copy updated to 15% hostiles', appjs.includes('compounding hulls, 15% faster hostiles'));
 check('fx-missile warhead styled (orange glow)', styles.includes('.fx-missile') && /fx-missile[^}]*#ff7a45/.test(styles));
@@ -237,7 +237,7 @@ check('deploy caps are count-based (limitReached + limitToast)', combat.includes
 check('both deploy gates run the count check', (combat.match(/limitReached\(entry\)/g) || []).length >= 2 && !combat.includes('state.towers.some((tower) => tower.id === entry.id)'));
 check('fire-control skips friendly summons', /let pool = state\.enemies\.filter\(\(enemy\) => \{[\s\S]{0,220}if \(enemy\.friendly\) return false;/.test(combat));
 check('dawn splash skips friendlies too', combat.includes('if (!enemy.alive || enemy === target || enemy.friendly) continue;'));
-check('summon intel trimmed to name + tag + live HP (allegiance rows purged)', combat.includes('function showSummonTip(summon, event)') && (combat.match(/showSummonTip\(/g) || []).length >= 3 && combat.includes("'CORPSE BLOSSOM SPAWN'") && combat.includes("'DRONE SPAWNER PAYLOAD'") && !combat.includes('ALLEGIANCE') && !combat.includes('CONTACT DMG'));
+check('summon intel trimmed to name + tag + live HP (allegiance rows purged)', combat.includes('function showSummonTip(summon, event)') && (combat.match(/showSummonTip\b/g) || []).length >= 2 && combat.includes("'CORPSE BLOSSOM SPAWN'") && combat.includes("'DRONE SPAWNER PAYLOAD'") && !combat.includes('ALLEGIANCE') && !combat.includes('CONTACT DMG'));
 check('friendly tip shows live HP only (allegiance rows purged)', !combat.includes('ALLEGIANCE') && !combat.includes('TOWERS IGNORE IT</b>'));
 check('ledger reconcile floor in both sanitizers (heal up, never down)', /if \(back > \(meta\.totalXp \|\| 0\)\) meta\.totalXp = back;/.test(serverjs) && /if \(back > \(meta\.totalXp \|\| 0\)\) meta\.totalXp = back;/.test(appjs) && /if \(back > \(legacy\.totalXp \|\| 0\)\) legacy\.totalXp = back;/.test(serverjs));
 check('vault panel labels the next-core bar + reassures the ledger', shopjs.includes('PROGRESS INTO THE NEXT CORE') && shopjs.includes('banking one never resets or spends your TOTAL XP'));
@@ -263,7 +263,7 @@ const soulTier = warden && warden.track[5];
 check('SOUL CHOIR rebalanced ($5,200 tier, $850 a soul, 40s hymns)', soulTier && soulTier.label === 'SOUL CHOIR' && soulTier.cost === 5200 && soulTier.sets.soul === 1 && soulTier.sets.soulCost === 850 && soulTier.sets.soulCd === 40);
 check('soul summon wired: launchWardenSoul + castSoul + core rise float', combat.includes('function launchWardenSoul(tower)') && combat.includes('function castSoul(tower)') && combat.includes("'A SOUL RISES FROM THE CORE'") && combat.includes("lane.len - 4"));
 check('soul hull forges from the yard: 10 x TOLL CHARGES (min 60)', combat.includes('Math.max(60, 10 * (tower.tollCharges || 0))'));
-check('soul rides the summon pipeline (friendly + reverse + kamikaze)', combat.includes("key: 'soul', t, node: g, fill, shieldFill: fill") && combat.includes('friendly: true, reverse: true,'));
+check('soul rides the summon pipeline (friendly + reverse + kamikaze)', combat.includes("key: 'soul', t, nid") && combat.includes('friendly: true, reverse: true,'));
 check('soul hover intel: GRAVE WARDEN CHOIR tag wired', combat.includes("'GRAVE WARDEN CHOIR'") && combat.includes("'VENGEFUL SOUL'"));
 check('warden panel shows SOUL CHOIR row + SUMMON SOUL ability', combat.includes('<span>SOUL CHOIR</span>') && combat.includes('SUMMON SOUL — $') && combat.includes("id=\"tp-soul\""));
 check('warden soulCd ticks in upkeep', combat.includes('tower.soulCd = Math.max(0, (tower.soulCd || 0) - dt);'));
@@ -300,10 +300,10 @@ check('four elite classes registered (spectre cloak / leech heal / bloat / rampa
 check('elite silhouettes wired (shroud / siphon arcs / blisters / berserk spikes)', combat.includes("class: 'e-ghost e-shroud'") && combat.includes("class: 'e-siphon'") && combat.includes("class: 'e-blister'") && /key === 'rampager'/.test(combat));
 check('spawn gaps cover the four elites', combat.includes('spectre: 0.7, leech: 1.6, bloat: 1.9, rampager: 2.4'));
 check('phase shroud drops targeting locks (pool filter + pad stickiness guard)', combat.includes('if (enemy.cloaked) return false; // NULL SPECTRE phase shroud') && combat.includes('tower.target.t.flying && !tower.target.cloaked'));
-check('cloak state machine cycles in moveEnemy', combat.includes("enemy.node.classList.toggle('e-cloak', Boolean(enemy.cloaked));"));
-check('leech siphon field pulses + heals + paints bars', combat.includes('enemy.healT = (enemy.healT === undefined ? enemy.t.heal.every : enemy.healT) - dt;') && combat.includes("fxRing(enemy.fx, enemy.fy, 'fx-ring-heal')") && combat.includes('SIPHON +'));
+check('cloak state machine cycles in moveEnemy', combat.includes("v.g.classList.toggle('e-cloak', Boolean(enemy.cloaked));"));
+check('leech siphon field pulses + heals + paints bars', combat.includes('enemy.healT = (enemy.healT === undefined ? enemy.t.heal.every : enemy.healT) - dt;') && combat.includes("emit('ring', enemy.fx, enemy.fy, 'fx-ring-heal')") && combat.includes('SIPHON +'));
 check('bloatware EMP: consts + empPop + killEnemy hook', combat.includes('const BLOAT_EMP_RADIUS = 85;') && combat.includes('const BLOAT_EMP_SECONDS = 2.5;') && combat.includes('function empPop(x, y)') && combat.includes("if (enemy.key === 'bloat' && !enemy.friendly) empPop(x, y);"));
-check('EMP knocks towers offline: upkeep clock + fire-control skip', combat.includes("tower.offlineT = Math.max(0, (tower.offlineT || 0) - dt);") && combat.includes("tower.node.classList.toggle('tw-offline', tower.offlineT > 0);") && combat.includes('if (tower.offlineT > 0) continue; // Bloatware EMP'));
+check('EMP knocks towers offline: upkeep clock + fire-control skip', combat.includes("tower.offlineT = Math.max(0, (tower.offlineT || 0) - dt);") && combat.includes("v.node.classList.toggle('tw-offline', (tower.offlineT || 0) > 0);") && combat.includes('if (tower.offlineT > 0) continue; // Bloatware EMP'));
 check('rampager enrage drives the ground move line', combat.includes('function enrageMult(enemy)') && combat.includes('enrageMult(enemy) * wardenYardMult(enemy)'));
 check('spiral ladder weaves all four elites + new phases', INSANE_WAVES && [4, 5, 7, 10, 11, 15, 22, 26].every((i) => INSANE_WAVES[i].groups.some(([k]) => k === 'spectre')) && [8, 9, 14, 16, 20, 24, 27].every((i) => INSANE_WAVES[i].groups.some(([k]) => k === 'bloat')) && [12, 13, 18, 23, 28, 29].every((i) => INSANE_WAVES[i].groups.some(([k]) => k === 'leech')) && [17, 19, 21, 25, 28].every((i) => INSANE_WAVES[i].groups.some(([k]) => k === 'rampager')) && INSANE_WAVES[4].phase === 'PHASE SHROUD' && INSANE_WAVES[17].phase === 'BERSERK LINE');
 check('every elite debuts where the log says it does', INSANE_WAVES && !INSANE_WAVES.slice(0, 4).some((w) => w.groups.some(([k]) => k === 'spectre')) && !INSANE_WAVES.slice(0, 8).some((w) => w.groups.some(([k]) => k === 'bloat')) && !INSANE_WAVES.slice(0, 12).some((w) => w.groups.some(([k]) => k === 'leech')) && !INSANE_WAVES.slice(0, 16).some((w) => w.groups.some(([k]) => k === 'rampager')));
@@ -380,7 +380,7 @@ check('DRONE SPAWNER ladder is monotonic in payload (90/150/220/300)', [drone.st
 check('FIELD AUDIT logged: 2026.11.04 entry leads the update log', appjs.indexOf("version: '2026.11.04', tag: 'FIELD AUDIT'") > -1 && appjs.indexOf("version: '2026.11.04'") < appjs.indexOf("version: '2026.11.03'"));
 check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
 check('footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP'));
-check('all 6 assets cache-busted to 20261024n', (indexhtml.match(/\?v=20261024n/g) || []).length === 6);
+check('all 6 assets cache-busted to 20261024o', (indexhtml.match(/\?v=20261024o/g) || []).length === 6);
 
 console.log('--- GLL FOUNDATIONS (2026.11.05): hosting merge, npm test law, env admin key ---');
 check('GLL FOUNDATIONS logged: 2026.11.05 entry leads the update log', appjs.indexOf("version: '2026.11.05', tag: 'GLL FOUNDATIONS'") > -1 && appjs.indexOf("version: '2026.11.05'") < appjs.indexOf("version: '2026.11.04'"));
