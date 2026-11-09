@@ -751,6 +751,7 @@ export function padAt(x, y) {
 }
 
 export function placeTower(entry, x, y) {
+  if (!buildingAllowed()) return false;
   if (state.towers.length >= towerLimit()) { emit('sound', 'alarm'); emit('toast', `Command grid saturated — ${towerLimit()} units max.`); return false; }
   if (limitReached(entry)) {
     emit('sound', 'alarm');
@@ -926,6 +927,7 @@ export function tarMult(enemy) {
 export function buyTrack(tower) {
   if (state.mode !== 'waves' && state.mode !== 'countdown') return;
   if (env.guestIntent('up', tower)) return;
+  if (!state.towers.includes(tower)) return; // stale intent: the tower was already sold
   const tiers = towerTrack(tower);
   const lvl = trackLevel(tower);
   if (lvl >= tiers.length) return;
@@ -944,8 +946,8 @@ export function buyTrack(tower) {
 
 export function sellTower(tower) {
   if (env.guestIntent('sell', tower)) return;
-  if (!state.towers.includes(tower)) return; // already scrapped: no second refund
-  const refund = Math.floor(trackInvested(tower) * 0.7);
+  if (!state.towers.includes(tower)) return; // stale intent: a second sell would pay twice
+  const refund = Math.floor(trackInvested(tower) * 0.7) + Math.round(tower.bank || 0); // War Bonds: the ledger comes back whole
   state.cash += refund;
   emit('towerDrop', tower);
   state.towers = state.towers.filter((item) => item !== tower);
