@@ -45,7 +45,7 @@ const stop = async () => { server.kill(); await wait(300); };
     run(['scripts/relay-test.js']);
   }
   await start();
-  for (const t of ['smoke', 'room']) run([`scripts/${t}-test.js`]);
+  for (const t of ['smoke', 'room', 'server-hardening']) run([`scripts/${t}-test.js`]);
   run(['scripts/admin-test.js', 'enabled']);
   run(['scripts/shop-test.js', '1']);
   run(['scripts/loadout-test.js', '1']);
