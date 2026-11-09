@@ -143,13 +143,13 @@ function paint() {
         <section class="config-panel">
           <h3>CREATE A ROOM</h3>
           <p class="dialog-copy">Up to four commanders. The server runs the mission; you need to be logged in.</p>
-          <select id="rooms-map" class="inline-button">${maps.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('')}</select>
-          <select id="rooms-mode" class="inline-button">${MODES.map((m) => `<option value="${m}">${m.toUpperCase()}</option>`).join('')}</select>
+          <select id="rooms-map" class="inline-button" aria-label="Map">${maps.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('')}</select>
+          <select id="rooms-mode" class="inline-button" aria-label="Combat protocol">${MODES.map((m) => `<option value="${m}">${m.toUpperCase()}</option>`).join('')}</select>
           <button class="start-button" id="rooms-create" type="button">CREATE ROOM <span>→</span></button>
         </section>
         <section class="config-panel">
           <h3>JOIN BY CODE</h3>
-          <input id="rooms-code" maxlength="8" placeholder="ROOM CODE" autocomplete="off">
+          <input id="rooms-code" maxlength="8" placeholder="ROOM CODE" aria-label="Room code" autocomplete="off">
           <button class="start-button" id="rooms-join" type="button">JOIN <span>→</span></button>
         </section>
       </div>${note}`;
@@ -169,8 +169,8 @@ function paint() {
   let action = '';
   if (room.phase === 'lobby') {
     action = lead
-      ? `<select id="rooms-cfg-map" class="inline-button">${maps.map((m) => `<option value="${esc(m.id)}"${m.id === room.map ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
-         <select id="rooms-cfg-mode" class="inline-button">${MODES.map((m) => `<option value="${m}"${m === room.mode ? ' selected' : ''}>${m.toUpperCase()}</option>`).join('')}</select>
+      ? `<select id="rooms-cfg-map" class="inline-button" aria-label="Map">${maps.map((m) => `<option value="${esc(m.id)}"${m.id === room.map ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
+         <select id="rooms-cfg-mode" class="inline-button" aria-label="Combat protocol">${MODES.map((m) => `<option value="${m}"${m === room.mode ? ' selected' : ''}>${m.toUpperCase()}</option>`).join('')}</select>
          <button class="start-button" id="rooms-start" type="button">START <span>→</span></button>`
       : `<p class="standby-note">MAP ${esc(room.map.toUpperCase())} // ${esc(room.mode.toUpperCase())}</p>
          <button class="start-button" id="rooms-ready" type="button">${mine && mine.ready ? 'NOT READY' : 'READY'}</button>`;
@@ -199,6 +199,7 @@ function paint() {
 }
 
 window.CBZRooms = {
+  close() { host = null; }, // another menu took the dialog: late link events must not repaint over it
   open(container) {
     host = container;
     if (!token()) { notice = 'LOG IN FIRST: rooms need a commander account.'; client = null; room = null; paint(); return; }
