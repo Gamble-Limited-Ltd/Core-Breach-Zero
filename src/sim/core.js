@@ -1,7 +1,7 @@
 // Simulation core: everything a host needs to run a mission without a page (no DOM, no rAF, no clock reads).
 // The view (combat.js) registers handlers in `view`; a headless host registers none. env carries what the page used to
 // provide through globals (perks, room size, debug flags) so the browser and a Node host run the same code.
-import { rand } from './rng.js';
+import { rand, createRng, useRng } from './rng.js';
 import { buildSampler } from './track.js';
 import { BASE_MAX, BLOAT_EMP_RADIUS, BLOAT_EMP_SECONDS, CORE_CLEAR, EASY_BOSS_RELIEF, EASY_WAVES, ENEMY_TYPES, FOOT_HALF, MODE_BOSS_LEAK, MODE_HP_GROWTH, MODE_HP_SCALE, MODE_LEAK, MODE_SPEED, NUKE_COOLDOWN, NUKE_COST, NUKE_DAMAGE, NUKE_RADIUS, PAD_AIR_BOOST, PAD_SNAP, SEP, SPAWN_GAP, SUMMON_CAP, SURGE_MODS, TOWER_BASE, TOWER_PER_ALLY, TOWER_RULES, TRACK_CLEAR, VETERAN_GUNS, WASTE_DPS, WASTE_RADIUS, WASTE_SECONDS, WAVES, WAVE_HP_SCALE } from '../combat/data.js';
 
@@ -13,7 +13,7 @@ export function emit(type, ...args) { const handler = view[type]; if (handler) h
 export const env = { perks: { has: () => false }, roomPlayers: 1, debugWave: 0, debugFreeze: false, coopGuest: () => false, guestIntent: () => false };
 
 // Simulation state: plain data only (the part a server can run). Anything that touches the page lives in combat.js `ui`.
-export const state = {
+const initialState = () => ({
   mode: 'idle', // idle | vote | countdown | waves | over
   protocol: 'easy', speed2x: false, bossHpMult: 1,
   wasteZones: [],
@@ -23,7 +23,17 @@ export const state = {
   towers: [], projectiles: [], pidSeq: 0, tidSeq: 0,
   bonusNc: 0,
   corpseLust: 0, // reserved telemetry: total Blood Lust banked across Blossoms
-};
+});
+// `state` is a live binding: the browser keeps the one default; a multi-room host makes one per room with createState
+// and calls useState(s) before each synchronous room step or intent (JS is single threaded, so nothing interleaves).
+export let state = initialState();
+// seed given: the room gets its own rng stream (installed by useState); omitted: it uses whatever rand() is set to.
+export function createState(seed) {
+  const s = initialState();
+  if (seed != null) s.rng = createRng(seed);
+  return s;
+}
+export function useState(s) { state = s; if (s.rng) useRng(s.rng); }
 
 // The mission ended: set the mode, then the view shows the result (the host also sends it to rooms).
 export function endSim(win) { state.mode = 'over'; emit('end', win); }
