@@ -31,6 +31,8 @@ const stop = async () => { server.kill(); await wait(300); };
 
 (async () => {
   run(['scripts/sim-test.js']);
+  run(['scripts/sim-intents-test.js']);
+  run(['scripts/golden-node.js']);
   for (const t of ['towers', 'crimson', 'hard']) run([`scripts/${t}-test.js`]);
   // Public MQTT brokers flake occasionally — one retry keeps the gate honest
   // about OUR code instead of failing CI over third-party network noise.

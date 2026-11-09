@@ -82,7 +82,7 @@ check('SNIPER rail trimmed (150 / 215 / 330)', sn.track[1].sets.dmg === 150 && s
 check('sniper rng + targeting untouched by the nerf', sn.track[0].sets.targeting === 'maxhp' && sn.track[4].sets.rng === 350 && sn.track[4].sets.rate === 0.4);
 
 console.log('--- Combat wiring (combat.js) ---');
-const combat = [read('combat.js'), read('src/combat/data.js')].join('\n');
+const combat = [read('combat.js'), read('src/sim/core.js'), read('src/combat/data.js')].join('\n');
 check('MISSILE SILO tracks air natively (no pad needed)', combat.includes("missilesilo: { air: 'yes' }"));
 check('SHREDDER is ground-only with pad AA', combat.includes("shredder: { air: 'no' }"));
 check('SHREDDER spits a chip-stream (fx-chip tracer)', combat.includes("case 'shredder':") && combat.includes("fireLine(tower, target, 'fx-chip'"));
@@ -189,7 +189,7 @@ check('UPDATE LOG leads with ULTIMATUM entry', appjs.indexOf("version: '2026.10.
 check('update log covers cap removal + vault + blossom card + migration', ['clearance cap is GONE', 'ULTIMATUM system goes live', 'first ULTIMATUM card', 'backfilled from their clearance history'].every((s) => appjs.includes(s)));
 check('update log covers sentinel buff + shredder + sniper nerf #3 + virus rework', ['SENTINEL TURRET buffed', 'SHREDDER decrypts at Clearance 20', 'SNIPER tuned down again', 'VIRUS reworked', 'MISSILE SILO'].every((s) => appjs.includes(s)));
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261024o', busts.length === 6 && busts.every((v) => v === '?v=20261024o'), busts.join(' '));
+check('all 6 index.html assets cache-busted to 20261024p', busts.length === 6 && busts.every((v) => v === '?v=20261024p'), busts.join(' '));
 check('shell footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP') && indexhtml.includes('THE CRIMSON WELL IS OPEN') && indexhtml.includes('ULTIMATUM VAULT OPEN'));
 check('play menu copy updated to 15% hostiles', appjs.includes('compounding hulls, 15% faster hostiles'));
 check('fx-missile warhead styled (orange glow)', styles.includes('.fx-missile') && /fx-missile[^}]*#ff7a45/.test(styles));
@@ -282,7 +282,7 @@ check('new fire cases wired (fx-spark + fx-flak + flyer-only burst)', combat.inc
 check('tar slick applies to walkers only + drags both move paths', combat.includes('enemy.tar = es.slow; enemy.tarT = 0.4;') && (combat.match(/tarMult\(enemy\)/g) || []).length >= 2 && combat.includes('function tarMult(enemy)'));
 check('relay network buffs hook dmg + rate + range', combat.includes("dmg *= relayMult(tower, 'dmg');") && combat.includes("relayMult(tower, 'rate')") && combat.includes("relayMult(tower, 'range')"));
 check('RALLY CRY casts: castRally + panel button + rally clock', combat.includes('function castRally(tower)') && combat.includes('other.rallyT = 6') && combat.includes('tower.boost = tower.rallyT > 0 ? 1.5 : 1;') && combat.includes("id=\"tp-rally\""));
-check('command ceiling back to 15 (SATURATION DOCTRINE buys 20)', combat.includes('const TOWER_BASE = 15;') && combat.includes("CBZPerks.has('saturation') ? base + 5 : base"));
+check('command ceiling back to 15 (SATURATION DOCTRINE buys 20)', combat.includes('const TOWER_BASE = 15;') && combat.includes("env.perks.has('saturation') ? base + 5 : base"));
 check('SATURATION DOCTRINE perk + WAR MACHINE achievement registered (app)', appjs.includes("id: 'saturation', name: 'SATURATION DOCTRINE', ach: 'warmachine'") && appjs.includes("id: 'warmachine', name: 'WAR MACHINE'") && /warmachine: Boolean\(bigWins >= 15\)/.test(appjs));
 check('perk + achievement mirrors land server-side', serverjs.includes("saturation: 'warmachine'") && /warmachine: Boolean\(bigWins >= 15\)/.test(serverjs));
 check('four new blueprints priced in both SHOP mirrors', ['sparkcoil', 'flakpost', 'tarsprayer', 'relay'].every((id) => serverjs.includes(`${id}: { name:`) && appjs.includes(`${id}: { name:`)));
@@ -380,7 +380,7 @@ check('DRONE SPAWNER ladder is monotonic in payload (90/150/220/300)', [drone.st
 check('FIELD AUDIT logged: 2026.11.04 entry leads the update log', appjs.indexOf("version: '2026.11.04', tag: 'FIELD AUDIT'") > -1 && appjs.indexOf("version: '2026.11.04'") < appjs.indexOf("version: '2026.11.03'"));
 check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
 check('footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP'));
-check('all 6 assets cache-busted to 20261024o', (indexhtml.match(/\?v=20261024o/g) || []).length === 6);
+check('all 6 assets cache-busted to 20261024p', (indexhtml.match(/\?v=20261024p/g) || []).length === 6);
 
 console.log('--- GLL FOUNDATIONS (2026.11.05): hosting merge, npm test law, env admin key ---');
 check('GLL FOUNDATIONS logged: 2026.11.05 entry leads the update log', appjs.indexOf("version: '2026.11.05', tag: 'GLL FOUNDATIONS'") > -1 && appjs.indexOf("version: '2026.11.05'") < appjs.indexOf("version: '2026.11.04'"));
@@ -390,7 +390,7 @@ check('old hardcoded admin code is gone from app + server', !appjs.includes('ADM
 check('ADMIN_KEY_CODE env gates the admin code on the server', serverjs.includes('process.env.ADMIN_KEY_CODE') && serverjs.includes('ADMIN_KEY_CODE.length >= 8'));
 
 console.log('--- Syntax gates ---');
-for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js']) {
+for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js', 'src/sim/core.js']) {
   try { require('child_process').execSync((f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
