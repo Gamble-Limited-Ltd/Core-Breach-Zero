@@ -32,5 +32,13 @@ const post = (path, body) => `POST ${path} HTTP/1.1\r\nHost: x\r\nContent-Length
     if (!ok) failed += 1;
     if (!(await alive())) { console.log('server is down, stopping'); break; }
   }
+  // WebSocket frames that parse to non-objects must not throw inside the message handler.
+  const { WebSocket } = require('ws');
+  for (const frame of ['null', '5', '"x"', '[]']) {
+    await new Promise((res) => { const w = new WebSocket(`ws://127.0.0.1:${PORT}/rooms`); w.on('open', () => w.send(frame)); w.on('error', res); w.on('close', res); setTimeout(res, 600); });
+    const ok = await alive();
+    console.log(`${ok ? 'PASS' : 'FAIL'} ws frame ${frame}`);
+    if (!ok) { failed += 1; break; }
+  }
   process.exit(failed ? 1 : 0);
 })();

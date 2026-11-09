@@ -640,6 +640,7 @@ webSockets.on('connection', (socket) => {
     } catch {
       return send(socket, { type: 'error', message: 'Invalid message.' });
     }
+    if (!message || typeof message !== 'object') return send(socket, { type: 'error', message: 'Invalid message.' });
 
     if (!socket.authenticated) {
       if (message.type !== 'authenticate') {
