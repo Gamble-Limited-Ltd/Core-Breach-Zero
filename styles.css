@@ -134,7 +134,7 @@ dialog::backdrop { background: rgba(0,0,0,.76); backdrop-filter: blur(4px); }.di
 @keyframes core-ring { from { r: 24; opacity: .8; } to { r: 42; opacity: 0; } }
 
 @media (max-width: 900px) { .shell { width: min(100% - 32px, 720px); }.home-layout { grid-template-columns: 1fr; gap: 25px; min-height: unset; padding: 35px 0; }.menu-column { max-width: none; }.sector-art { height: 145px; } }
-@media (max-width: 560px) { .shell { width: calc(100% - 24px); }.topbar { height: 70px; }.brand-mark { width: 36px; height: 36px; }.brand strong { font-size: 12px; }.brand small { font-size: 9px; }.top-status { gap: 8px; }.status-chip { gap: 6px; font-size: 9px; }.status-chip b { display: none; }.sound-button { min-width: auto; padding: 8px; font-size: 9px; }.home-layout { padding: 27px 0; }.menu-column h1 { font-size: 30px; }.menu-item { min-height: 65px; gap: 10px; padding: 9px; }.menu-icon { flex-basis: 36px; height: 36px; }.menu-copy strong { font-size: 11px; }.menu-copy small { font-size: 9px; }.home-footer, .status-footer { font-size: 8px; }.status-footer { flex-direction: column; }.dialog-head { padding: 18px 16px 14px; }.dialog-body { padding: 16px; }.action-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .shell { width: calc(100% - 24px); }.topbar { height: auto; min-height: 70px; padding: 8px 0; gap: 8px; }.top-status { flex-wrap: wrap; justify-content: flex-end; }.wallet { flex-wrap: wrap; }.brand small { display: none; }.brand-mark { width: 36px; height: 36px; }.brand strong { font-size: 12px; }.brand small { font-size: 9px; }.top-status { gap: 8px; }.status-chip { gap: 6px; font-size: 9px; }.status-chip b { display: none; }.sound-button { min-width: auto; padding: 8px; font-size: 9px; }.home-layout { padding: 27px 0; }.menu-column h1 { font-size: 30px; }.menu-item { min-height: 65px; gap: 10px; padding: 9px; }.menu-icon { flex-basis: 36px; height: 36px; }.menu-copy strong { font-size: 11px; }.menu-copy small { font-size: 9px; }.home-footer, .status-footer { font-size: 8px; }.status-footer { flex-direction: column; }.dialog-head { padding: 18px 16px 14px; }.dialog-body { padding: 16px; }.action-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
 /* ===================== COMBAT PROTOCOL (Easy Mode) ===================== */
@@ -644,6 +644,7 @@ dialog.shop-open { width: min(1060px, calc(100% - 28px)); }
 .block-float { fill: #ff8a96; }
 
 @media (max-width: 900px) { .lo-slot { width: 96px; } .lo-hint { display: none; } .loadout-bar { bottom: 10px; } }
+@media (max-width: 560px) { .lo-slots { gap: 4px; } .lo-slot { width: 68px; padding: 8px 2px 6px; } .lo-slot b, .lo-slot small { font-size: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
 
 /* --- Restored deployment bays + squad lobby (old room browser) --- */
 .bays-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
