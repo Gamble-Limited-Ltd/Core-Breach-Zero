@@ -1257,6 +1257,7 @@ export function switchGun(tower) {
 
 // --- WAR BONDS: deposit + withdraw ----------------------------------------------------
 export function bondDeposit(tower) {
+  if (!state.towers.includes(tower)) return;
   const es = effStats(tower);
   const cap = es.bondCap || 3000;
   if ((tower.bank || 0) >= cap) { emit('sound', 'alarm'); emit('toast', `The bond is full — $${formatCash(cap)} cap. Withdraw or upgrade the ledger.`); return; }
@@ -1271,6 +1272,7 @@ export function bondDeposit(tower) {
 }
 
 export function bondWithdraw(tower) {
+  if (!state.towers.includes(tower)) return;
   const amount = Math.round(tower.bank || 0);
   if (amount <= 0) return;
   tower.bank = 0;

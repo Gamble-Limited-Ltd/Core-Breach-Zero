@@ -114,6 +114,9 @@ const check = (name, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); if
   const beforeBondSell = state.cash;
   core.sellTower(bondTower);
   check('selling War Bonds returns the banked cash too', state.cash === beforeBondSell + Math.floor(bonds.cost * 0.7) + 500);
+  const cashAfterBondSell = state.cash;
+  core.bondWithdraw(bondTower); core.bondDeposit(bondTower);
+  check('a sold War Bonds ledger can no longer move cash', state.cash === cashAfterBondSell);
   fresh(5000); state.mode = 'over';
   check('no building after the mission ends', core.placeTower(entry, px, py) === false && state.towers.length === 0);
 
