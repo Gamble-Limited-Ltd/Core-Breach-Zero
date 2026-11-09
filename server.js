@@ -501,7 +501,8 @@ async function handleApi(request, response, pathname) {
 }
 
 const server = http.createServer((request, response) => {
-  const reqUrl = new URL(request.url, `http://${request.headers.host}`);
+  let reqUrl;
+  try { reqUrl = new URL(request.url, 'http://localhost'); } catch { response.writeHead(400).end('Bad request'); return; }
   const pathname = reqUrl.pathname;
   if (pathname.startsWith('/api/')) {
     handleApi(request, response, pathname);
@@ -513,7 +514,9 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  const requestedPath = pathname === '/' ? '/index.html' : decodeURIComponent(pathname);
+  let requestedPath;
+  try { requestedPath = pathname === '/' ? '/index.html' : decodeURIComponent(pathname); } catch { response.writeHead(400).end('Bad request'); return; }
+  if (requestedPath.includes('\0')) { response.writeHead(400).end('Bad request'); return; }
   const filePath = path.resolve(root, `.${requestedPath}`);
   const relParts = path.relative(root, filePath).split(path.sep);
   if (!filePath.startsWith(`${root}${path.sep}`) || relParts.some((p) => p.startsWith('.')) || /^accounts.*\.json$/i.test(relParts[0])) {
@@ -637,6 +640,7 @@ webSockets.on('connection', (socket) => {
     } catch {
       return send(socket, { type: 'error', message: 'Invalid message.' });
     }
+    if (!message || typeof message !== 'object') return send(socket, { type: 'error', message: 'Invalid message.' });
 
     if (!socket.authenticated) {
       if (message.type !== 'authenticate') {

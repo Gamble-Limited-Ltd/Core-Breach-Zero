@@ -663,6 +663,7 @@ export function readyRig() {
 }
 
 export function fireNuke(x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   const rig = readyRig();
   if (!rig || (rig.nukeCd || 0) > 0) { emit('nukeAim', false); return; }
   if (state.cash < NUKE_COST) { emit('sound', 'alarm'); emit('toast', `Need $${NUKE_COST} salvage to call the nuke.`); emit('nukeAim', false); return; }
@@ -729,7 +730,7 @@ export function buildingAllowed() {
 
 // --- Placement engine: anywhere on the grid, clearance boxes enforce spacing -----------
 export function canPlace(x, y) {
-  if (x < FOOT_HALF || x > 1000 - FOOT_HALF || y < FOOT_HALF || y > 600 - FOOT_HALF) return { ok: false, reason: 'OUT OF BOUNDS' };
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < FOOT_HALF || x > 1000 - FOOT_HALF || y < FOOT_HALF || y > 600 - FOOT_HALF) return { ok: false, reason: 'OUT OF BOUNDS' };
   if (Math.hypot(x - state.map.core.x, y - state.map.core.y) < CORE_CLEAR) return { ok: false, reason: 'KEEP CLEAR OF THE CORE' };
   // The convoy lane is hostile territory — no building on or across the track.
   for (const [tx, ty] of state.trackPts) {
@@ -750,6 +751,7 @@ export function padAt(x, y) {
 }
 
 export function placeTower(entry, x, y) {
+  if (!buildingAllowed()) return false;
   if (state.towers.length >= towerLimit()) { emit('sound', 'alarm'); emit('toast', `Command grid saturated — ${towerLimit()} units max.`); return false; }
   if (limitReached(entry)) {
     emit('sound', 'alarm');
@@ -925,6 +927,7 @@ export function tarMult(enemy) {
 export function buyTrack(tower) {
   if (state.mode !== 'waves' && state.mode !== 'countdown') return;
   if (env.guestIntent('up', tower)) return;
+  if (!state.towers.includes(tower)) return; // stale intent: the tower was already sold
   const tiers = towerTrack(tower);
   const lvl = trackLevel(tower);
   if (lvl >= tiers.length) return;
@@ -943,7 +946,8 @@ export function buyTrack(tower) {
 
 export function sellTower(tower) {
   if (env.guestIntent('sell', tower)) return;
-  const refund = Math.floor(trackInvested(tower) * 0.7);
+  if (!state.towers.includes(tower)) return; // stale intent: a second sell would pay twice
+  const refund = Math.floor(trackInvested(tower) * 0.7) + Math.round(tower.bank || 0); // War Bonds: the ledger comes back whole
   state.cash += refund;
   emit('towerDrop', tower);
   state.towers = state.towers.filter((item) => item !== tower);
@@ -1253,6 +1257,7 @@ export function switchGun(tower) {
 
 // --- WAR BONDS: deposit + withdraw ----------------------------------------------------
 export function bondDeposit(tower) {
+  if (!state.towers.includes(tower)) return;
   const es = effStats(tower);
   const cap = es.bondCap || 3000;
   if ((tower.bank || 0) >= cap) { emit('sound', 'alarm'); emit('toast', `The bond is full — $${formatCash(cap)} cap. Withdraw or upgrade the ledger.`); return; }
@@ -1267,6 +1272,7 @@ export function bondDeposit(tower) {
 }
 
 export function bondWithdraw(tower) {
+  if (!state.towers.includes(tower)) return;
   const amount = Math.round(tower.bank || 0);
   if (amount <= 0) return;
   tower.bank = 0;

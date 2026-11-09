@@ -702,6 +702,7 @@ function openMenu(key) {
   const item = menus[key];
   if (!item) return;
   playSound();
+  if (key !== 'online' && window.CBZRooms) CBZRooms.close();
   updatePreview(key);
   document.querySelector('#dialog-kicker').textContent = `// ${item.tag}`;
   document.querySelector('#dialog-title').textContent = item.title;
@@ -2024,7 +2025,15 @@ function connectRoom() {
 
 // Hosted build (core-breach-host answers /api/hosted): the old room lanes have no service here, ONLINE ROOMS is the multiplayer.
 let hostedBuild = false;
-fetch('/api/hosted', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { hostedBuild = !!(j && j.ok); }).catch(() => {});
+fetch('/api/hosted', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+  hostedBuild = !!(j && j.ok);
+  if (!hostedBuild) return;
+  // The room lanes are hidden here, so the PLAY MENU copy must not promise them.
+  menus.play.description = menus.play.description.replace('Enter one of four rooms for up to four commanders, or recon any of the 5 battle maps solo.', 'Recon any of the 5 battle maps solo. Squad missions for up to four commanders live in ONLINE ROOMS.');
+  menus.play.stats = [['MAP RECON', '5 SECTORS'], ['SQUAD MISSIONS', 'ONLINE ROOMS'], ['SERVER PORT', port]];
+  document.querySelector('.menu-item[data-menu="play"] small').textContent = 'Solo map recon';
+  if (document.querySelector('.menu-item.selected')?.dataset.menu === 'play') updatePreview('play');
+}).catch(() => {});
 
 function openPlayMenu() {
   if (hostedBuild) { showingBays = false; return renderMapSelect(); }
