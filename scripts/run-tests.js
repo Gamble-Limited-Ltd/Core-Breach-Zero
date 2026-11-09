@@ -35,7 +35,7 @@ const stop = async () => { server.kill(); await wait(300); };
   run(['scripts/golden-node.js']);
   run(['scripts/sim-rooms-test.js']);
   run(['scripts/rooms-client-test.js']);
-  for (const t of ['towers', 'crimson', 'hard']) run([`scripts/${t}-test.js`]);
+  for (const t of ['towers', 'crimson', 'hard', 'sim-hardening']) run([`scripts/${t}-test.js`]);
   // Public MQTT brokers flake occasionally — one retry keeps the gate honest
   // about OUR code instead of failing CI over third-party network noise.
   run(['scripts/relay-test.js']); // needs internet (public MQTT brokers)
@@ -45,7 +45,7 @@ const stop = async () => { server.kill(); await wait(300); };
     run(['scripts/relay-test.js']);
   }
   await start();
-  for (const t of ['smoke', 'room']) run([`scripts/${t}-test.js`]);
+  for (const t of ['smoke', 'room', 'server-hardening']) run([`scripts/${t}-test.js`]);
   run(['scripts/admin-test.js', 'enabled']);
   run(['scripts/shop-test.js', '1']);
   run(['scripts/loadout-test.js', '1']);

@@ -100,6 +100,26 @@ const check = (name, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); if
   Math.random = realRandom;
   check('two seeded runs give identical simStats', a === b);
 
+  // 9 stale and edge intents (a room host may repeat or reorder them)
+  fresh(5000);
+  core.placeTower(entry, px, py);
+  const gone = state.towers[0]; core.sellTower(gone);
+  const afterSell = state.cash;
+  core.sellTower(gone); core.buyTrack(gone);
+  check('selling a sold tower pays nothing more', state.cash === afterSell);
+  const bonds = TOWERS.find((t) => t.id === 'warbonds');
+  fresh(50000);
+  core.placeTower(bonds, px, py);
+  const bondTower = state.towers[0]; core.bondDeposit(bondTower);
+  const beforeBondSell = state.cash;
+  core.sellTower(bondTower);
+  check('selling War Bonds returns the banked cash too', state.cash === beforeBondSell + Math.floor(bonds.cost * 0.7) + 500);
+  const cashAfterBondSell = state.cash;
+  core.bondWithdraw(bondTower); core.bondDeposit(bondTower);
+  check('a sold War Bonds ledger can no longer move cash', state.cash === cashAfterBondSell);
+  fresh(5000); state.mode = 'over';
+  check('no building after the mission ends', core.placeTower(entry, px, py) === false && state.towers.length === 0);
+
   console.log(`\n${pass} PASSED / ${fail} FAILED`);
   process.exit(fail ? 1 : 0);
 })();
