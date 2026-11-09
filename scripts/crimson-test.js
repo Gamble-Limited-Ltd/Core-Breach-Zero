@@ -44,7 +44,7 @@ check('buildBoard paints the crimson decor + theme hook', appjs.includes("board.
 check('openBattlefield accepts a map object for the event map', appjs.includes("typeof mapId === 'object' && mapId ? mapId : BATTLE_MAPS[mapId]"));
 
 console.log('--- Crimson protocol (combat.js) ---');
-const combat = [read('combat.js'), read('src/combat/data.js')].join('\n');
+const combat = [read('combat.js'), read('src/sim/core.js'), read('src/combat/data.js')].join('\n');
 const CRIMSON_WAVES = extractLiteral(combat, 'CRIMSON_WAVES');
 const ENEMY_TYPES = extractLiteral(combat, 'ENEMY_TYPES');
 const SURGE_MODS = extractLiteral(combat, 'SURGE_MODS');
@@ -110,7 +110,7 @@ const indexhtml = read('index.html');
 const styles = read('styles.css');
 check('menu button ??? with crimson subtext', indexhtml.includes('data-menu="crimson"') && indexhtml.includes('???</strong>') && indexhtml.includes('The Crimson Dawn Approaches'));
 check('countdown line lives on the button', indexhtml.includes('id="crimson-count"'));
-check('all 6 assets cache-busted to 20261024o', (indexhtml.match(/\?v=20261024o/g) || []).length === 6);
+check('all 6 assets cache-busted to 20261024p', (indexhtml.match(/\?v=20261024p/g) || []).length === 6);
 check('eerie glow styles: menu pulse + big countdown + deploy button', styles.includes('.menu-item.menu-crimson') && styles.includes('.crimson-big') && styles.includes('.crimson-deploy'));
 check('dawn beam style for the relic', styles.includes('.fx-dawn'));
 check('footer brands the Well', indexhtml.includes('THE CRIMSON WELL IS OPEN'));
@@ -152,7 +152,7 @@ check('UPDATE LOG leads with FLIGHT CORRIDOR entry', appjs.indexOf("version: '20
 check('update log covers drone nerf + corridor pads + intel readout', ['1 core damage per leak', 'Two AA pads laid directly under the drone approach lines', 'protocol-adjusted CORE DMG'].every((s) => appjs.includes(s)));
 
 console.log('--- Syntax gates ---');
-for (const f of ['app.js', 'combat.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js']) {
+for (const f of ['app.js', 'combat.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js', 'src/sim/core.js']) {
   try { require('child_process').execSync((f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }

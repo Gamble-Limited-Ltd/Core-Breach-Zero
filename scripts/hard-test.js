@@ -29,7 +29,7 @@ function extractLiteral(src, name) {
 }
 
 console.log('--- HELL PROTOCOL: combat.js difficulty core ---');
-const combat = [read('combat.js'), read('src/combat/data.js')].join('\n');
+const combat = [read('combat.js'), read('src/sim/core.js'), read('src/combat/data.js')].join('\n');
 const ENEMY_TYPES = extractLiteral(combat, 'ENEMY_TYPES');
 const SURGE_MODS = extractLiteral(combat, 'SURGE_MODS');
 const HARD_WAVES = extractLiteral(combat, 'HARD_WAVES');
@@ -99,11 +99,11 @@ check('LOCAL hard boss + flawless bumped (18 NC / 65 XP / 100 NC flawless)', app
 check('server.js REWARDS.hard mirrors LOCAL exactly', JSON.stringify(appRewards.hard) === JSON.stringify(serverRewards.hard));
 check('easy/medium rewards untouched', appRewards.easy.winNC === 60 && appRewards.medium.winNC === 100);
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261024o', busts.length === 6 && busts.every((v) => v === '?v=20261024o'), busts.join(' '));
+check('all 6 index.html assets cache-busted to 20261024p', busts.length === 6 && busts.every((v) => v === '?v=20261024p'), busts.join(' '));
 check('play menu copy names the hell pass', appjs.includes('30 waves of pure hell'));
 
 console.log('--- Syntax gates ---');
-for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js']) {
+for (const f of ['combat.js', 'app.js', 'server.js', 'src/shop/data.js', 'src/shop/ui.js', 'src/app/update-log.js', 'src/app/progression.js', 'src/app/maps.js', 'src/combat/data.js', 'src/sim/core.js']) {
   try { require('child_process').execSync((f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? 'node --input-type=module --check' : `node --check ${path.join(ROOT, f)}`, { stdio: 'pipe', input: (f === 'app.js' || f === 'combat.js' || f.startsWith('src/')) ? fs.readFileSync(path.join(ROOT, f)) : undefined }); check(`${f} parses clean`, true); }
   catch (err) { check(`${f} parses clean`, false, String(err.stderr).slice(0, 200)); }
 }
