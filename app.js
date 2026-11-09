@@ -104,6 +104,11 @@ const menus = {
     description: 'Every deployment to the Core Breach grid, newest first. The grid keeps receipts.',
     stats: [['ENTRIES', `${UPDATE_LOG.length}`], ['LATEST', UPDATE_LOG[0].version], ['BUILD', BUILD]],
   },
+  online: {
+    tag: 'ONLINE ROOMS', title: 'ONLINE ROOMS',
+    description: 'Server-run squad missions for up to four commanders: create a room or join one by code. The server plays the sim, your browser shows it.',
+    stats: [['ROOMS', 'ONLINE'], ['SQUAD', 'UP TO 4'], ['SIM', 'ON THE SERVER']],
+  },
   about: {
     tag: 'CREDITS', title: 'ABOUT & CREDITS',
     description: 'Game created and owned by Jackson Loomis. Hosted and assisted by Gamble Limited Ltd.',
@@ -706,6 +711,7 @@ function openMenu(key) {
   else if (key === 'perks') renderPerksMenu(item);
   else if (key === 'settings') renderSettingsPanel(item);
   else if (key === 'changelog') renderUpdateLog(item);
+  else if (key === 'online' && window.CBZRooms) CBZRooms.open(body);
   else renderDetails(item);
   dialog.showModal();
 }
@@ -2629,8 +2635,9 @@ restoreSession();
 // app.js is an ES module now, so its names are no longer global. combat.js (classic)
 // and src/shop/ui.js still read these by bare name. shortcut: window globals, shrink
 // this list as combat.js is split into modules.
-Object.assign(window, { BATTLE_MAPS, LOCAL, apiRequest, body, escapeHtml, hexPoints, menus, openMenu, playSound, sendToService, setStatus, showToast, svgNode });
+Object.assign(window, { BATTLE_MAPS, LOCAL, apiRequest, body, escapeHtml, exitBattlefield, hexPoints, loadProfile, menus, openBattlefield, openMenu, playSound, sendToService, setStatus, showToast, svgNode });
 Object.defineProperties(window, { // live bindings: these are reassigned inside app.js
   myName: { get: () => myName, configurable: true },
   currentRoom: { get: () => currentRoom, configurable: true },
+  cbzToken: { get: () => authToken, configurable: true }, // for src/rooms/view.js
 });
