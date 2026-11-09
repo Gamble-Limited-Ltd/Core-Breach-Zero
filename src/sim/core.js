@@ -663,6 +663,7 @@ export function readyRig() {
 }
 
 export function fireNuke(x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   const rig = readyRig();
   if (!rig || (rig.nukeCd || 0) > 0) { emit('nukeAim', false); return; }
   if (state.cash < NUKE_COST) { emit('sound', 'alarm'); emit('toast', `Need $${NUKE_COST} salvage to call the nuke.`); emit('nukeAim', false); return; }
@@ -729,7 +730,7 @@ export function buildingAllowed() {
 
 // --- Placement engine: anywhere on the grid, clearance boxes enforce spacing -----------
 export function canPlace(x, y) {
-  if (x < FOOT_HALF || x > 1000 - FOOT_HALF || y < FOOT_HALF || y > 600 - FOOT_HALF) return { ok: false, reason: 'OUT OF BOUNDS' };
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < FOOT_HALF || x > 1000 - FOOT_HALF || y < FOOT_HALF || y > 600 - FOOT_HALF) return { ok: false, reason: 'OUT OF BOUNDS' };
   if (Math.hypot(x - state.map.core.x, y - state.map.core.y) < CORE_CLEAR) return { ok: false, reason: 'KEEP CLEAR OF THE CORE' };
   // The convoy lane is hostile territory — no building on or across the track.
   for (const [tx, ty] of state.trackPts) {
@@ -943,6 +944,7 @@ export function buyTrack(tower) {
 
 export function sellTower(tower) {
   if (env.guestIntent('sell', tower)) return;
+  if (!state.towers.includes(tower)) return; // already scrapped: no second refund
   const refund = Math.floor(trackInvested(tower) * 0.7);
   state.cash += refund;
   emit('towerDrop', tower);
