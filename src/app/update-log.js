@@ -9,6 +9,7 @@ export const UPDATE_LOG = [
       ['OPS', 'The code split begins — the Nexus Shop and the menu shell moved into native ES modules (src/shop/*, app.js plus src/app/ for the update log, progression tables and battle maps, combat.js plus src/combat/data.js for the enemy roster, wave ladders and tower rules): same game, smaller files to maintain.'],
       ['OPS', 'The combat sim is being made runnable without a browser: its random rolls go through one seedable generator, one sim step is separate from drawing, projectiles, enemies and towers are plain data, and track paths are sampled without an SVG. Gameplay is unchanged; a recorded 60 second run matches before and after.'],
       ['OPS', 'The combat rules now live in src/sim/core.js with no page code in them: the browser draws what the sim reports (toasts, panels, fx lines, tower nodes) through events, and a server can run the same file. Gameplay is unchanged; the recorded runs still match.'],
+      ['OPS', 'The sim core can now hold many missions at once (createState/useState plus a per-room random stream), so a server can run several rooms in one process. The browser still uses its single default mission; nothing changes in play.'],
       ['OPS', 'Image types (png, webp, svg) now carry their real content type; the smoke test covers mime, cache, 304 and gzip.'],
     ],
   },
