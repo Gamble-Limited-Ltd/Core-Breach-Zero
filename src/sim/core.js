@@ -1506,3 +1506,47 @@ export function updateProjectiles(dt) {
   }
   state.projectiles = state.projectiles.filter((p) => !p.dead);
 }
+
+// Reset the mission state for a map (the sim half of startMission). The caller works out the opening cash (perks, debug).
+export function startSim(map, cash) {
+  state.map = map;
+  state.mode = 'vote';
+  state.protocol = null; // the combat protocol locks in at the vote
+  state.speed2x = false;
+  state.samplers = buildSamplers(map);
+  // Flat point cloud of every lane: placement checks + drone spawn gates use it.
+  state.trackPts = state.samplers.flatMap((sampler) => sampler.pts);
+  prepMechanics(map, state.samplers);
+  state.cash = cash;
+  state.baseHp = BASE_MAX;
+  state.enemies = [];
+  state.towers = [];
+  state.projectiles = [];
+  state.wasteZones = [];
+  state.bonusNc = 0;
+  state.kills = 0;
+  state.bossesKilled = 0;
+  state.earned = 0;
+  state.waveIndex = -1;
+  state.clock = 0;
+  state.nidSeq = 0;
+  state.guestMap = new Map();
+  state.syncT = 0;
+  state.syncTitle = '';
+  state.syncSeq = 0;
+  state.lastSyncSeq = 0;
+}
+
+// Lock in the protocol and start the pre-wave countdown (the sim half of launchCombat).
+export function launchSim(mode) {
+  state.protocol = mode;
+  if (mode === 'hard' || mode === 'insane' || mode === 'crimson') state.cash = Math.round(state.cash * (mode === 'crimson' ? 0.7 : mode === 'insane' ? 0.65 : 0.8)); // HELL strips opening salvage
+  state.mode = 'countdown';
+  state.countdown = 3.4;
+  state.lastCount = 4;
+}
+
+// Read-only telemetry for QA, tests and the Node golden run.
+export function simStats() {
+  return ({ mode: state.mode, wave: state.waveIndex + 1, kills: state.kills, cash: Math.round(state.cash), base: state.baseHp, towers: state.towers.length, enemies: state.enemies.filter((enemy) => enemy.alive).length, towersDetail: state.towers.map((t) => ({ id: t.id, onPad: !!t.onPad })), flyingAlive: state.enemies.filter((e) => e.alive && e.t.flying).length, friendliesAlive: state.enemies.filter((e) => e.alive && e.friendly).length, friendlyTargeted: state.towers.some((t) => t.target && t.target.alive && t.target.friendly) });
+}

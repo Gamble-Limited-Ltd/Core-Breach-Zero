@@ -2,7 +2,7 @@
 // Loaded after app.js: uses its globals (BATTLE_MAPS, svgNode, playSound, showToast...).
 // Mode voting (EASY + MEDIUM) + per-protocol wave ladders + enemies that follow every map's tracks and mechanics.
 import { BASE_MAX, ENEMY_TYPES, FOOT_HALF, NUKE_COST, NUKE_RADIUS, START_SALVAGE, VETERAN_GUNS, WASTE_RADIUS, WAVES } from './src/combat/data.js';
-import { leakDamage, missionWaves, towerLimit, limitReached, limitToast, buildSamplers, prepMechanics, simStep, readyRig, fireNuke, bloodPurge, bloodScream, buildingAllowed, canPlace, padAt, placeTower, trackLevel, towerTrack, effStats, trackInvested, relayMult, castRally, castSoul, buyTrack, sellTower, switchGun, bondDeposit, bondWithdraw, formatCash, state, view, emit, env } from './src/sim/core.js';
+import { startSim, launchSim, simStats, leakDamage, missionWaves, towerLimit, limitReached, limitToast, buildSamplers, prepMechanics, simStep, readyRig, fireNuke, bloodPurge, bloodScream, buildingAllowed, canPlace, padAt, placeTower, trackLevel, towerTrack, effStats, trackInvested, relayMult, castRally, castSoul, buyTrack, sellTower, switchGun, bondDeposit, bondWithdraw, formatCash, state, view, emit, env } from './src/sim/core.js';
 (() => {
 const board = document.querySelector('#board');
 const battlefield = document.querySelector('#battlefield');
@@ -682,34 +682,9 @@ function closeVote() {
 // --- Mission lifecycle ------------------------------------------------------------------
 function startMission(map, skipVote = false, forcedProtocol = null) {
   if (state.mode !== 'idle' && state.mode !== 'over') return;
-  state.map = map;
-  state.mode = 'vote';
-  state.protocol = null; // the combat protocol locks in at the vote
-  state.speed2x = false;
-  state.samplers = buildSamplers(map);
-  // Flat point cloud of every lane — placement checks + drone spawn gates use it.
-  state.trackPts = state.samplers.flatMap((sampler) => sampler.pts);
-  prepMechanics(map, state.samplers);
-  state.cash = (debugCash || START_SALVAGE) + (window.CBZPerks && CBZPerks.has('deeppockets') ? 150 : 0);
-  state.baseHp = BASE_MAX;
-  state.enemies = [];
-  state.towers = [];
-  state.projectiles = [];
-  state.wasteZones = [];
+  startSim(map, (debugCash || START_SALVAGE) + (window.CBZPerks && CBZPerks.has('deeppockets') ? 150 : 0));
   ui.nukeAim = false;
-  state.bonusNc = 0;
   ui.building = null;
-  state.kills = 0;
-  state.bossesKilled = 0;
-  state.earned = 0;
-  state.waveIndex = -1;
-  state.clock = 0;
-  state.nidSeq = 0;
-  state.guestMap = new Map();
-  state.syncT = 0;
-  state.syncTitle = '';
-  state.syncSeq = 0;
-  state.lastSyncSeq = 0;
   ensureLayers();
   ensureHud();
   ensureLoadoutBar();
@@ -722,13 +697,9 @@ function startMission(map, skipVote = false, forcedProtocol = null) {
 
 function launchCombat(mode) {
   closeVote();
-  state.protocol = mode;
-  if (mode === 'hard' || mode === 'insane' || mode === 'crimson') state.cash = Math.round(state.cash * (mode === 'crimson' ? 0.7 : mode === 'insane' ? 0.65 : 0.8)); // HELL strips 20% of opening salvage, the DOUBLED SPIRAL 35%, and the DAWN 30% — you deploy wounded
+  launchSim(mode);
   const proto = document.querySelector('#combat-protocol');
   if (proto) proto.textContent = String(mode).toUpperCase();
-  state.mode = 'countdown';
-  state.countdown = 3.4;
-  state.lastCount = 4;
   ui.last = performance.now();
   ui.raf = requestAnimationFrame(tick);
   emit('sound');
@@ -1623,6 +1594,6 @@ window.CBZCombat = {
   coopHandle,
   active: () => state.mode !== 'idle',
   // Read-only telemetry for QA + tests.
-  stats: () => ({ mode: state.mode, wave: state.waveIndex + 1, kills: state.kills, cash: Math.round(state.cash), base: state.baseHp, towers: state.towers.length, enemies: state.enemies.filter((enemy) => enemy.alive).length, towersDetail: state.towers.map((t) => ({ id: t.id, onPad: !!t.onPad })), flyingAlive: state.enemies.filter((e) => e.alive && e.t.flying).length, friendliesAlive: state.enemies.filter((e) => e.alive && e.friendly).length, friendlyTargeted: state.towers.some((t) => t.target && t.target.alive && t.target.friendly) }),
+  stats: simStats,
 };
 })();
