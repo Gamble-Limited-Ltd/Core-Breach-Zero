@@ -38,7 +38,7 @@ function ensureClient() {
 function onRoom(msg) {
   room = msg;
   if (msg.phase === 'running' && !inMission) startMission();
-  if (inMission && msg.mode) state.protocol = msg.mode;
+  if (inMission && msg.mode) setProtocol(msg.mode);
   if (msg.phase === 'lobby' && ended) return; // keep the result panel up until the player leaves it
   paint();
 }
@@ -67,9 +67,15 @@ function startMission() {
   CBZCombat.startOnline(map, {
     intent: (msg) => client && client.send(msg),
     frame: (dt) => { mirror.smooth(state, dt); const d = dirty; dirty = false; return d; },
-    abort: () => { if (!ended && client) client.leave(); room = null; leaveMission(); },
+    abort: () => { if (!ended && client) { client.leave(); room = null; } leaveMission(); }, // after the result the player stays in the room
   });
-  state.protocol = room.mode;
+  setProtocol(room.mode);
+}
+
+function setProtocol(mode) {
+  state.protocol = mode;
+  const el = document.querySelector('#combat-protocol');
+  if (el) el.textContent = String(mode).toUpperCase();
 }
 
 function leaveMission() { inMission = false; ended = false; mirror.reset(); }
@@ -95,7 +101,7 @@ async function onEnd(msg) {
       <div class="end-actions"><button class="inline-button" id="end-room" type="button">BACK TO ROOM</button></div>
     </div>`;
   document.querySelector('#battlefield').appendChild(panel);
-  panel.querySelector('#end-room').addEventListener('click', () => { leaveMission(); window.exitBattlefield(); window.openMenu('online'); });
+  panel.querySelector('#end-room').addEventListener('click', () => { window.exitBattlefield(); leaveMission(); window.openMenu('online'); });
   // The server pays before or just after this frame; read the wallet now and once more shortly after.
   for (const delay of [0, 2000]) {
     await new Promise((r) => setTimeout(r, delay));
@@ -130,6 +136,8 @@ function paint() {
   const maps = Object.values(window.BATTLE_MAPS).filter((m) => !m.event && m.id !== 'cbz');
   const note = notice ? `<p class="standby-note">${esc(notice)}</p>` : '';
   if (!room) {
+    // Repaints (link open, notices) must not wipe what the player already typed or picked.
+    const keep = Object.fromEntries(['#rooms-code', '#rooms-map', '#rooms-mode'].map((id) => [id, host.querySelector(id)?.value]));
     host.innerHTML = `
       <div class="lobby-grid">
         <section class="config-panel">
@@ -145,8 +153,11 @@ function paint() {
           <button class="start-button" id="rooms-join" type="button">JOIN <span>→</span></button>
         </section>
       </div>${note}`;
-    host.querySelector('#rooms-create').onclick = () => client && client.create(host.querySelector('#rooms-map').value, host.querySelector('#rooms-mode').value);
-    host.querySelector('#rooms-join').onclick = () => client && client.join(host.querySelector('#rooms-code').value);
+    for (const [id, v] of Object.entries(keep)) if (v !== undefined) host.querySelector(id).value = v;
+    // send() drops frames until the link is authenticated: say so instead of doing nothing.
+    const act = (fn) => { if (client && fn()) return; notice = 'CONNECTING TO THE ROOM SERVER... TRY AGAIN IN A MOMENT.'; paint(); };
+    host.querySelector('#rooms-create').onclick = () => act(() => client.create(host.querySelector('#rooms-map').value, host.querySelector('#rooms-mode').value));
+    host.querySelector('#rooms-join').onclick = () => act(() => client.join(host.querySelector('#rooms-code').value));
     return;
   }
   const me = window.myName;
