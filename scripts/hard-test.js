@@ -99,7 +99,7 @@ check('LOCAL hard boss + flawless bumped (18 NC / 65 XP / 100 NC flawless)', app
 check('server.js REWARDS.hard mirrors LOCAL exactly', JSON.stringify(appRewards.hard) === JSON.stringify(serverRewards.hard));
 check('easy/medium rewards untouched', appRewards.easy.winNC === 60 && appRewards.medium.winNC === 100);
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261024p', busts.length === 6 && busts.every((v) => v === '?v=20261024p'), busts.join(' '));
+check('all 6 index.html assets cache-busted to 20261108b', busts.length === 6 && busts.every((v) => v === '?v=20261108b'), busts.join(' '));
 check('play menu copy names the hell pass', appjs.includes('30 waves of pure hell'));
 
 console.log('--- Syntax gates ---');

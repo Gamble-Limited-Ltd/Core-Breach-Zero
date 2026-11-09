@@ -396,7 +396,15 @@ const wasteNodes = new WeakMap();
 env.perks = { has: (key) => Boolean(window.CBZPerks && CBZPerks.has(key)) };
 Object.defineProperty(env, 'roomPlayers', { get: () => Number(window.CBZ_ROOM_PLAYERS) || 1 });
 env.coopGuest = () => coopGuest();
+// Online rooms (src/rooms/view.js): the server runs the sim. `online` = { intent(msg), frame(dt) -> bool, abort() }.
+// While set: no simStep, the renderers draw plain-data entities from snapshots, player actions go out as intents.
+let online = null;
 env.guestIntent = (kind, tower) => {
+  if (online) {
+    online.intent({ t: kind === 'up' ? 'upgrade' : 'sell', uid: tower.uid });
+    if (kind === 'sell') closeTowerPanel();
+    return true;
+  }
   if (!coopGuest()) return false;
   coopIntent({ a: kind, t: state.towers.indexOf(tower) });
   if (kind === 'sell') closeTowerPanel();
@@ -409,6 +417,11 @@ function tick(ts) {
   let dt = Math.min(0.05, (ts - ui.last) / 1000 || 0);
   ui.last = ts;
   if (state.speed2x) dt *= 2; // OVERDRIVE perk: the whole sim runs at double tempo
+  if (online) {
+    if (online.frame(Math.min(dt, 0.1))) { updateHud(); updateBossBar(); paintNukeButton(); }
+    renderProjectiles(); renderEnemies(); renderTowers();
+    return;
+  }
   if (coopGuest()) { state.clock += dt; guestFrame(dt); return; }
   simStep(dt);
   renderProjectiles();
@@ -695,6 +708,21 @@ function startMission(map, skipVote = false, forcedProtocol = null) {
   else showVote('solo');
 }
 
+function startOnline(map, link) {
+  if (state.mode !== 'idle' && state.mode !== 'over') return;
+  online = link;
+  startSim(map, 0);
+  ui.nukeAim = false;
+  ui.building = null;
+  ensureLayers();
+  ensureHud();
+  ensureLoadoutBar();
+  ensureTip();
+  setStatus(`ONLINE ROOM // ${map.name}`);
+  ui.last = performance.now();
+  ui.raf = requestAnimationFrame(tick);
+}
+
 function launchCombat(mode) {
   closeVote();
   launchSim(mode);
@@ -706,6 +734,7 @@ function launchCombat(mode) {
 }
 
 function restoreRecon() {
+  online = null;
   state.mode = 'idle';
   const exit = document.querySelector('#exit-battle');
   exit.textContent = 'EXIT RECON';
@@ -824,6 +853,7 @@ function ensureLayers() {
 
 function abort() {
   if (state.mode === 'idle') return;
+  if (online && online.abort) online.abort();
   cancelAnimationFrame(ui.raf);
   closeVote();
   if (ui.endPanel) { ui.endPanel.remove(); ui.endPanel = null; }
@@ -1309,21 +1339,22 @@ function openTowerPanel(tower) {
   ui.panelTower = tower;
   towerNodeOf(tower).classList.add('selected');
   panel.querySelectorAll('.tp-buy').forEach((button) => button.addEventListener('click', () => buyTrack(tower)));
+  const cast = (kind, local) => () => (online ? online.intent({ t: 'cast', uid: tower.uid, kind }) : local(tower));
   panel.querySelector('.tp-sell').addEventListener('click', () => sellTower(tower));
   const purge = panel.querySelector('#tp-purge');
-  if (purge) purge.addEventListener('click', () => bloodPurge(tower));
+  if (purge) purge.addEventListener('click', cast('purge', bloodPurge));
   const scream = panel.querySelector('#tp-scream');
-  if (scream) scream.addEventListener('click', () => bloodScream(tower));
+  if (scream) scream.addEventListener('click', cast('scream', bloodScream));
   const soul = panel.querySelector('#tp-soul');
-  if (soul) soul.addEventListener('click', () => castSoul(tower));
+  if (soul) soul.addEventListener('click', cast('soul', castSoul));
   const rally = panel.querySelector('#tp-rally');
-  if (rally) rally.addEventListener('click', () => castRally(tower));
+  if (rally) rally.addEventListener('click', cast('rally', castRally));
   const gunBtn = panel.querySelector('#tp-gun');
-  if (gunBtn) gunBtn.addEventListener('click', () => switchGun(tower));
+  if (gunBtn) gunBtn.addEventListener('click', cast('gun', switchGun));
   const depositBtn = panel.querySelector('#tp-deposit');
-  if (depositBtn) depositBtn.addEventListener('click', () => bondDeposit(tower));
+  if (depositBtn) depositBtn.addEventListener('click', cast('deposit', bondDeposit));
   const withdrawBtn = panel.querySelector('#tp-withdraw');
-  if (withdrawBtn) withdrawBtn.addEventListener('click', () => bondWithdraw(tower));
+  if (withdrawBtn) withdrawBtn.addEventListener('click', cast('withdraw', bondWithdraw));
   refreshPanelAfford();
 }
 
@@ -1396,10 +1427,14 @@ board.addEventListener('pointerleave', () => {
 board.addEventListener('click', (event) => {
   if (!ui.bar || !buildingAllowed()) return;
   const [x, y] = boardPoint(event);
-  if (ui.nukeAim) { fireNuke(x, y); return; }
+  if (ui.nukeAim) {
+    if (online) { online.intent({ t: 'nuke', x, y }); setNukeAim(false); } else fireNuke(x, y);
+    return;
+  }
   if (ui.building) {
     const verdict = canPlace(x, y);
     if (!verdict.ok) { rejectPlace(x, y, verdict.reason); return; }
+    if (online) { online.intent({ t: 'place', id: ui.building.id, x, y }); return; }
     if (coopGuest()) {
       coopIntent({ a: 'place', id: ui.building.id, x, y });
       emit('float', x, y - 20, 'SYNC → SQUAD LEAD', 'sync-float');
@@ -1590,6 +1625,7 @@ function coopHandle(message) {
 
 window.CBZCombat = {
   startMission,
+  startOnline,
   abort,
   coopHandle,
   active: () => state.mode !== 'idle',

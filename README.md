@@ -15,6 +15,9 @@ npm test    # every suite, each on its own throwaway server + accounts file
 
 `npm test` must pass before every push to `main` — see `AGENTS.md`.
 
+## Online rooms
+The ONLINE ROOMS menu entry opens server-run squad missions (create a room or join by code). It needs a room host that serves `/rooms/ws` on the same origin; the browser code is in `src/rooms/`. `node scripts/rooms-e2e.mjs <host-dir>` checks the client against a running host.
+
 ## Credits
 
 Game created and owned by Jackson Loomis. Hosted and assisted by [Gamble Limited Ltd](https://hall.taps-holdings.org) (HALL).
