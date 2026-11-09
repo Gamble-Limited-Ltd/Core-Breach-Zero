@@ -189,7 +189,7 @@ check('UPDATE LOG leads with ULTIMATUM entry', appjs.indexOf("version: '2026.10.
 check('update log covers cap removal + vault + blossom card + migration', ['clearance cap is GONE', 'ULTIMATUM system goes live', 'first ULTIMATUM card', 'backfilled from their clearance history'].every((s) => appjs.includes(s)));
 check('update log covers sentinel buff + shredder + sniper nerf #3 + virus rework', ['SENTINEL TURRET buffed', 'SHREDDER decrypts at Clearance 20', 'SNIPER tuned down again', 'VIRUS reworked', 'MISSILE SILO'].every((s) => appjs.includes(s)));
 const busts = indexhtml.match(/\?v=([0-9a-z]+)/g) || [];
-check('all 6 index.html assets cache-busted to 20261108a', busts.length === 6 && busts.every((v) => v === '?v=20261108a'), busts.join(' '));
+check('all 6 index.html assets cache-busted to 20261108b', busts.length === 6 && busts.every((v) => v === '?v=20261108b'), busts.join(' '));
 check('shell footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP') && indexhtml.includes('THE CRIMSON WELL IS OPEN') && indexhtml.includes('ULTIMATUM VAULT OPEN'));
 check('play menu copy updated to 15% hostiles', appjs.includes('compounding hulls, 15% faster hostiles'));
 check('fx-missile warhead styled (orange glow)', styles.includes('.fx-missile') && /fx-missile[^}]*#ff7a45/.test(styles));
@@ -380,7 +380,7 @@ check('DRONE SPAWNER ladder is monotonic in payload (90/150/220/300)', [drone.st
 check('FIELD AUDIT logged: 2026.11.04 entry leads the update log', appjs.indexOf("version: '2026.11.04', tag: 'FIELD AUDIT'") > -1 && appjs.indexOf("version: '2026.11.04'") < appjs.indexOf("version: '2026.11.03'"));
 check('BUILD bumped to 2026.11.06', appjs.includes("const BUILD = '2026.11.06';"));
 check('footer brands HOSTING PREP', indexhtml.includes('BUILD 2026.11.06 // HOSTING PREP'));
-check('all 6 assets cache-busted to 20261108a', (indexhtml.match(/\?v=20261108a/g) || []).length === 6);
+check('all 6 assets cache-busted to 20261108b', (indexhtml.match(/\?v=20261108b/g) || []).length === 6);
 
 console.log('--- GLL FOUNDATIONS (2026.11.05): hosting merge, npm test law, env admin key ---');
 check('GLL FOUNDATIONS logged: 2026.11.05 entry leads the update log', appjs.indexOf("version: '2026.11.05', tag: 'GLL FOUNDATIONS'") > -1 && appjs.indexOf("version: '2026.11.05'") < appjs.indexOf("version: '2026.11.04'"));

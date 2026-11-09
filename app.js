@@ -2022,7 +2022,12 @@ function connectRoom() {
   socket.addEventListener('error', () => showToast('Could not reach the room service. Check the server port.'));
 }
 
+// Hosted build (core-breach-host answers /api/hosted): the old room lanes have no service here, ONLINE ROOMS is the multiplayer.
+let hostedBuild = false;
+fetch('/api/hosted', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { hostedBuild = !!(j && j.ok); }).catch(() => {});
+
 function openPlayMenu() {
+  if (hostedBuild) { showingBays = false; return renderMapSelect(); }
   if (LOCAL.down()) {
     showingBays = true;
     if (P2P_ROOMS.usable()) {
